@@ -1,111 +1,107 @@
-# Number Headings Plugin for Obsidian
+# Obsidian Number Adder Plugin
 
-Add numbers to headings in a doc with outline style numbering. For example, "1.1.2".
+This is a plugin designed for [Obsidian](https://obsidian.md) that automatically adds hierarchical numbering to Markdown headings and supports numbering for math formula blocks (`$$...$$`).
 
-## How to install
+The core code and concept are derived from the [number-headings](https://github.com/onlyafly/number-headings-obsidian) plugin. Thank you!
 
-There are two ways to get the plugin:
+This plugin is powerful and highly configurable. All settings apply individually to each file and are stored in the file's Front Matter.
 
-1. Install the latest release from Obsidian directly. Go to Settings -> Community Plugins -> Browse.
-2. Unzip the most recent release into your `<vault>/.obsidian/plugins/` folder. You can find the latest release at <https://github.com/onlyafly/number-headings-obsidian/releases/latest>.
+## Core Features
 
-After you have installed the plugin, make sure that the switch for "Number Headings" is turned on.
+* **Multi-level Heading Numbering**:
+    * Automatically adds hierarchical numbering to H1 through H6 headings (e.g., `1.`, `1.1.`, `1.1.1.`).
+    * Provides fine-grained control via a unified "Numbering Control" panel.
+* **Flexible Style Customization**:
+    * **Style by Level**: Allows setting the numbering style *individually* for each of the 1–6 heading levels.
+    * **Supported Styles**:
+        * `1`: Arabic numerals (1, 2, 3...)
+        * `a`: Lowercase letters (a, b, c...)
+        * `A`: Uppercase letters (A, B, C...)
+        * `一`: Chinese numerals (一, 二, 三...)
+        * `①`: Circled numbers (①, ②, ③...)
+    * **Separator by Level**: Customize the separator between levels (e.g., between H1 and H2), such as `.`, `-`, `:`, etc.
+    * **Start Value by Level**: Set a starting number for *each* heading level, including starting from `0` (e.g., `零` or `⓪`).
+* **Advanced Formula Numbering**:
+    * Automatically adds `\tag{...}` numbering to `$$...$$` math blocks.
+    * Supports two modes:
+        1.  **Continuous**: Numbers increment throughout the document as `(1)`, `(2)`, `(3)`...
+        2.  **Heading-based**: Generates numbers based on the previous heading’s number, e.g., `(1.1-1)`, `(1.1-2)`, `(2.1-1)`...
+* **Unified Control Panel**:
+    * Opens a modal via the `Number Control` command, providing access to all features.
+    * **Manual Numbering**: Immediately number headings, formulas, or both, or remove all numbering.
+    * **Auto Numbering Settings**: Configure all styles, ranges, start values, and whether to auto-number headings or formulas.
+* **Front Matter-based Configuration**:
+    * All settings apply to *individual files* and are saved in a compact format under the Front Matter keys `number headings` and `number formulas`.
+    * This allows each document to have its own independent numbering scheme without changing global settings.
+* **Automatic Table of Contents (TOC) Generation**:
+    * (Retained feature) Supports adding an anchor (e.g., `^toc`) in headings, and the plugin will automatically generate a table of contents linking to all headings under that heading.
 
-## How to use the plugin
+## How to Use
 
-To use this plugin:
+1. Open the Command Palette (Cmd/Ctrl + P).
+2. Search for and run the **"Number Control"** command.
+3. **In the "Manual Numbering" tab**:
+    * Click **"Number Headings"** or **"Number Formulas"** to apply numbering immediately.
+    * Click **"Remove All Numbering"** to clear all numbering in the current document.
+4. **In the "Auto Numbering Settings" tab**:
+    * Turn the **"Auto Number Headings"** or **"Auto Number Formulas"** switches on or off as needed.
+    * Select your **"Formula Numbering Mode"** (Continuous or Heading-based).
+    * Set the **"Numbering Range"** you wish to apply (e.g., from H1 to H6).
+    * **Configure Styles**: Select the "Type", "Separator", and "Start Value" for each of the 1–6 heading levels.
+    * Click **"Save Auto Numbering Settings and Apply Once"**.
+5. Your settings will be saved to the file's Front Matter and applied once immediately. If auto-numbering is enabled, the plugin will automatically update based on your set refresh interval.
 
-1. Open the command palette (type `CMD + P` on Mac or its equivalent on other platforms).
-2. Start typing the name of one of the actions. See below:
+## Advanced Front Matter Configuration
 
-| Action                                             | Hotkey          |
-| -------------------------------------------------- | --------------- |
-| Number all headings in document (and show options) | None by default |
-| Number all headings in document                    | None by default |
-| Remove numbering from all headings in document     | None by default |
-| Save settings to front matter                      | None by default |
+All settings are stored in a compact format under the `number headings` and `number formulas` keys.
 
-You can also assign the commands to hotkeys for easy usage.
+### `number headings`
 
-See the settings page for the plugin for detailed instructions on the various settings you can use with the plugin.
+Format: `[auto], [range], [styles], [separators], [start-values], [options]`
 
-## Version History
+* **`auto`**: (Optional) If present, automatically numbers headings.
+* **`range`**: Level range, e.g., `1-6`.
+* **`styles`**: A 6-character string corresponding to the style for H1–H6. e.g., `1aA一①1`.
+* **`separators`**: A 5-character string for separators between H1-H2, H2-H3...H5-H6. e.g., `-:.—`.
+* **`start-values`**: A 6-character string for the starting value of H1–H6. e.g., `011111` (H1 starts from 0, others from 1).
+* **`options`**: (Optional)
+    * `contents ^toc`: Sets a table of contents anchor.
+    * `skip ^skip`: Skips headings containing the `^skip` anchor.
 
-### 1.16.0 (Oct 3, 2023)
+**Example:**
+`number headings: auto, 1-6, 1aA一①1, -:.—, 011111, contents ^toc`
 
-* Added support for skipping headings using the `skip` front matter setting. See <https://github.com/onlyafly/number-headings-obsidian/issues/25>.
+### `number formulas`
 
-### 1.15.0 (Sep 23, 2023)
+Format: `[auto], [mode]`
 
-* Added option to turn off automatic numbering for specific files. See <https://github.com/onlyafly/number-headings-obsidian/issues/43>.
+* **`auto`**: (Optional) If present, automatically numbers formulas.
+* **`mode`**: `continuous` or `heading-based`.
 
-### 1.14.0 (Sep 21, 2023)
+**Example:**
+`number formulas: auto, heading-based`
 
-* Fixed bug where you could no longer automatically insert settings on a per document basis. See <https://github.com/onlyafly/number-headings-obsidian/issues/54>.
+---
 
-### 1.13.0 (Jan 6, 2023)
+## Changelog
 
-* Added support for a right parenthesis as a separator.
+### 2.0.0 
 
-### 1.12.0 (Jan 1, 2023)
+* **Major Change:** Introduced `headingStyles`, `headingSeparators`, and `headingStartValues` arrays, allowing *individual* configuration of style, separator, and start value for each of the 1–6 heading levels.
+* **New Feature:** Added support for **Chinese numerals** (`一, 二, 三`) and **circled numerals** (`①, ②, ③`).
+* **New Feature:** Added **"Heading-based"** (`heading-based`) mode for formula numbering (e.g., `1.1-1`, `1.1-2`).
+* **New Feature:** Introduced a unified **"Numbering Control"** modal that integrates all manual and auto settings.
+* **Major Change (Removed):** Removed support for Roman numerals (`I`, `i`) to simplify maintenance and core logic.
+* **Major Change (Removed):** Removed the old, single `start-at` setting. More powerful per-level control is now provided by the `headingStartValues` array.
+* **Major Change (Removed):** Removed all old Front Matter keys (e.g., `styleLevel1`, `styleLevelOther`, `separator`, `auto`, etc.). All settings are now uniformly stored in the compact strings under the `number headings` and `number formulas` keys.
 
-* Added support for Roman numerals as numbers. See <https://github.com/onlyafly/number-headings-obsidian/issues/34>.
+---
 
-### 1.11.0 (Jan 1, 2023)
+### Legacy Changelog (1.12.0 and earlier)
 
-* Added the 'start-at' setting to allow numbering to start at a number other than 1. See <https://github.com/onlyafly/number-headings-obsidian/issues/33>.
-* Fixed bug where table of contents would cause Obsidian to freeze if there is no other headings. See <https://github.com/onlyafly/number-headings-obsidian/issues/37>.
-
-### 1.10.1 (Dec 31, 2022)
-
-* Fixed bug where a separator like " -" (space before a dash) would cause a loop during header updates. See <https://github.com/onlyafly/number-headings-obsidian/issues/36>.
-
-### 1.10.0 (June 29, 2022)
-
-* Added new command "Number all headings in document (and show options)" which shows the options dialog after numbering. Changed the old command "Number all headings in document" to number without showing the dialog. See <https://github.com/onlyafly/number-headings-obsidian/issues/15>.
-
-### 1.9.0 (June 19, 2022)
-
-* Fixed several bugs. See <https://github.com/onlyafly/number-headings-obsidian/issues/29>, <https://github.com/onlyafly/number-headings-obsidian/issues/23>, and <https://github.com/onlyafly/number-headings-obsidian/issues/13>.
-
-### 1.8.1 (December 15, 2021)
-
-* Fixed bug where in some situations settings were not transferred to the front matter. See <https://github.com/onlyafly/number-headings-obsidian/issues/19>
-
-### 1.8.0 (October 26, 2021)
-
-* Add automatic table of contents rendering
-* Add first-level setting to allow skipping several heading levels
-* Fixed bug where skipped headings that started with numbers would be erased
-
-### 1.7.3 (August 24, 2021)
-
-* Cleaned up explanations of front matter in settings screen.
-
-### 1.7.2 (August 19, 2021)
-
-* Improved how numbering is inserted behind the scenes, so that undo history is preserved better and works faster.
-
-### 1.7.1 (August 18, 2021)
-
-* Fixed bug where skipped headings might have separators incorrectly inserted.
-
-### 1.7.0 (August 18, 2021)
-
-* Added support for custom separators between the heading numbering and the heading text.
-
-### 1.6.1 (August 15, 2021)
-
-* Improved how headings are inserted, so that the undo history is not polluted with too many irrelevant changes.
-
-### 1.6.0 (August 14, 2021)
-
-* Simplified the front matter settings to use a single key
-
-### 1.5.1 (August 14, 2021)
-
-* Fixed some bugs where "undefined" sometimes got printed at the start of lines after user removed a heading
-
-## Credits
-
-I was inspired partially by the Obsidian plugin <https://github.com/hipstersmoothie/obsidian-plugin-toc> and some of the code logic is descended from that plugin. Thanks!
+* 1.12.0: (Removed) Added support for Roman numerals.
+* 1.11.0: (Removed) Added 'start-at' setting.
+* 1.10.1: Fixed a loop error caused by separators.
+* 1.8.0: Added automatic TOC rendering and 'first-level' setting.
+* 1.7.0: (Removed) Added support for custom separators (now upgraded to per-level definition).
+* 1.6.0: (Removed) Simplified Front Matter settings to a single key (now updated to new compact format).
