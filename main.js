@@ -18,11 +18,18 @@ REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF MERCHANTABILITY
 AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY SPECIAL, DIRECT,
 INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES WHATSOEVER RESULTING FROM
 LOSS OF USE, DATA OR PROFITS, WHETHER IN AN ACTION OF CONTRACT, NEGLIGENCE OR
-OTHER TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR
+OTHER TORTIOUS ACTION, ARISING OF OR IN CONNECTION WITH THE USE OR
 PERFORMANCE OF THIS SOFTWARE.
 ***************************************************************************** */
 
-// Rollup/TypeScript 编译辅助函数，用于处理异步操作
+// ====================================================================================
+// 异步辅助函数
+// ====================================================================================
+
+/**
+ * TypeScript 编译生成的异步等待辅助函数。
+ * 用于处理 async/await 的状态机。
+ */
 function __awaiter(thisArg, _arguments, P, generator) {
     function adopt(value) { return value instanceof P ? value : new P(function (resolve) { resolve(value); }); }
     return new (P || (P = Promise))(function (resolve, reject) {
@@ -33,18 +40,23 @@ function __awaiter(thisArg, _arguments, P, generator) {
     });
 }
 
-// Rollup/TypeScript 编译辅助函数，用于错误处理
+/**
+ * 错误抑制处理函数。
+ * 用于处理 Promise 中的错误抑制情况。
+ */
 typeof SuppressedError === "function" ? SuppressedError : function (error, suppressed, message) {
     var e = new Error(message);
     return e.name = "SuppressedError", e.error = error, e.suppressed = suppressed, e;
 };
 
-// --- Obsidian API 辅助函数 ---
+// ====================================================================================
+// Obsidian 视图与编辑器辅助函数
+// ====================================================================================
 
 /**
- * 获取 Obsidian 工作区中活动的 Markdown 视图。
- * @param {obsidian.App} app - Obsidian App 实例。
- * @returns {obsidian.MarkdownView | undefined} 活动的 Markdown 视图，如果不存在则返回 undefined。
+ * 获取当前活跃的 Markdown 视图。
+ * @param {App} app Obsidian 应用实例
+ * @returns {MarkdownView | undefined} 返回活跃的 MarkdownView，如果不存在则返回 undefined
  */
 function getActiveView(app) {
     const activeView = app.workspace.getActiveViewOfType(obsidian.MarkdownView);
@@ -52,9 +64,9 @@ function getActiveView(app) {
 }
 
 /**
- * 检查当前是否有活动的 Markdown 视图。
- * @param {obsidian.App} app - Obsidian App 实例。
- * @returns {boolean} 如果有活动的 Markdown 视图且该视图关联了文件，则返回 true。
+ * 检查当前是否有活跃的 Markdown 视图且包含文件。
+ * @param {App} app 
+ * @returns {boolean}
  */
 function isViewActive(app) {
     const activeView = getActiveView(app);
@@ -64,9 +76,9 @@ function isViewActive(app) {
 }
 
 /**
- * 获取活动视图的文件元数据缓存。
- * @param {obsidian.App} app - Obsidian App 实例。
- * @returns {obsidian.CachedMetadata | undefined} 文件的元数据，如果不存在则返回 undefined。
+ * 获取当前活跃视图文件的元数据缓存。
+ * @param {App} app 
+ * @returns {CachedMetadata | undefined}
  */
 function getViewMetadata(app) {
     const activeView = getActiveView(app);
@@ -78,10 +90,9 @@ function getViewMetadata(app) {
 }
 
 /**
- * 获取活动视图的组合信息（视图、元数据、编辑器）。
- * @param {obsidian.App} app - Obsidian App 实例。
- * @returns {{ activeView: obsidian.MarkdownView, data: obsidian.CachedMetadata, editor: obsidian.Editor } | undefined}
- * 包含视图、元数据和编辑器的对象，如果任一不存在则返回 undefined。
+ * 聚合获取当前视图、元数据和编辑器实例。
+ * @param {App} app 
+ * @returns {{activeView: MarkdownView, data: CachedMetadata, editor: Editor} | undefined}
  */
 function getViewInfo(app) {
     const activeView = getActiveView(app);
@@ -95,16 +106,43 @@ function getViewInfo(app) {
     return undefined;
 }
 
-// --- 编号系统常量与逻辑 ---
+/**
+ * 恢复编辑器光标位置。
+ * 用于在自动更新编号导致文档内容变更后，将用户光标重置回变更前的位置，避免跳动。
+ * 包含边界检查，防止光标设置到不存在的行或字符位置。
+ * * @param {Editor} editor 编辑器实例
+ * @param {EditorPosition} cursor 保存的光标位置对象 {line, ch}
+ */
+function restoreCursor(editor, cursor) {
+    try {
+        const lineCount = editor.lineCount();
+        if (cursor.line < lineCount) {
+            const lineLength = editor.getLine(cursor.line).length;
+            if (cursor.ch <= lineLength) {
+                editor.setCursor(cursor);
+            }
+            else {
+                editor.setCursor(cursor.line, lineLength); // 如果原位置超出当前行长度，则设置到行尾
+            }
+        }
+    }
+    catch (e) {
+        console.log("Number Headings Plugin: Error restoring cursor", e);
+    }
+}
 
-// 定义汉字数字（零到十）
+// ====================================================================================
+// 编号系统常量与核心逻辑
+// ====================================================================================
+
+// 中文数字映射表 (用于 '一' 样式)
 const chineseNumbers = ['零', '一', '二', '三', '四', '五', '六', '七', '八', '九', '十'];
-// 定义带圈数字（⓪ 到 ⑳）
+// 带圈数字映射表 (用于 '①' 样式)
 const circledNumbers = ['⓪', '①', '②', '③', '④', '⑤', '⑥', '⑦', '⑧', '⑨', '⑩', '⑪', '⑫', '⑬', '⑭', '⑮', '⑯', '⑰', '⑱', '⑲', '⑳'];
 
 /**
- * 验证字符串是否为有效的阿拉伯数字（仅包含0-9）。
- * @param {string} s - 要验证的字符串。
+ * 验证字符串是否为有效的阿拉伯数字。
+ * @param {string} s 
  * @returns {boolean}
  */
 function isValidArabicNumberingValueString(s) {
@@ -113,35 +151,34 @@ function isValidArabicNumberingValueString(s) {
 }
 
 /**
- * 获取指定样式和起始值的“第零个”编号标记。
- * 这通常是第一个编号标记的前一个。
- * @param {string} style - 编号样式 (例如 '1', 'A', 'a')。
- * @param {string} startValue - 该样式的起始值 (例如 '1', 'A', 'a')。
- * @returns {object} 编号标记对象 { style, value }。
+ * 根据样式获取“零值”Token。
+ * 用于计算编号的前一个状态 (例如 1 的前一个是 0, A 的前一个是 @/Z)。
+ * * @param {string} style 编号样式 ('1', 'A', 'a', etc.)
+ * @param {string} startValue 起始值
+ * @returns {{style: string, value: any}}
  */
 function zerothNumberingTokenInStyle(style, startValue) {
     switch (style) {
         case '1':
             return { style: '1', value: parseInt(startValue) - 1 || 0 };
         case 'A':
-            // 对于字母，如果起始值是'A'，则零值应该是'Z'，否则向前推一个
+            // 字母回退逻辑：如果起始是 'A'，前一个设为 'Z' (作为一种循环标记)，或者 ASCII 码减 1
             if (startValue === 'A') return { style: 'A', value: 'Z' };
             else return { style: 'A', value: String.fromCharCode(startValue.charCodeAt(0) - 1) };
         case 'a':
-            // 对于小写字母，如果起始值是'a'，则零值应该是'z'，否则向前推一个
             if (startValue === 'a') return { style: 'a', value: 'z' };
             else return { style: 'a', value: String.fromCharCode(startValue.charCodeAt(0) - 1) };
     }
-    // 默认返回数字类型的零值
+    // 默认回退逻辑
     return { style: '1', value: parseInt(startValue) - 1 || 0 };
 }
 
 /**
- * 获取指定样式和起始值的“第一个”编号标记。
- * 支持 '0' 作为起始值，并能正确处理 '一' 和 '①' 样式。
- * @param {string} style - 编号样式 (例如 '1', 'A', 'a', '一', '①')。
- * @param {string} startValue - 起始值 (可以是数字 '0', '1' 或样式字符 'A', '一')。
- * @returns {object} 编号标记对象 { style, value }。
+ * 获取特定样式的起始编号 Token。
+ * 处理不同样式下起始值为数字或字符的转换逻辑，特别是支持 '0' 作为起始值的情况。
+ * * @param {string} style 编号样式 ('1', 'A', 'a', '一', '①')
+ * @param {string} startValue 用户设置的起始值字符串
+ * @returns {{style: string, value: any}}
  */
 function firstNumberingTokenInStyle(style, startValue) {
     const startNum = parseInt(startValue);
@@ -149,190 +186,181 @@ function firstNumberingTokenInStyle(style, startValue) {
 
     switch (style) {
         case '1':
-            return { style: '1', value: startNum }; // 允许 0
+            return { style: '1', value: startNum }; // 直接支持 0 或正整数
         case 'A':
             if (isNumericStart) {
-                if (startNum === 0) return { style: 'A', value: '&' }; // 0 -> 特殊标记 '&'
-                if (startNum > 0) return { style: 'A', value: String.fromCharCode('A'.charCodeAt(0) + startNum - 1) }; // 1 -> A, 2 -> B
+                // 特殊处理：0 -> '&' (A的前一位), >0 -> 计算对应字母
+                if (startNum === 0) return { style: 'A', value: '&' };
+                if (startNum > 0) return { style: 'A', value: String.fromCharCode('A'.charCodeAt(0) + startNum - 1) };
                 return { style: 'A', value: 'A' }; // 负数回退
             }
-            return { style: 'A', value: startValue || 'A' }; // 非数字起始值
+            return { style: 'A', value: startValue || 'A' };
         case 'a':
             if (isNumericStart) {
-                if (startNum === 0) return { style: 'a', value: '&' }; // 0 -> 特殊标记 '&'
-                if (startNum > 0) return { style: 'a', value: String.fromCharCode('a'.charCodeAt(0) + startNum - 1) }; // 1 -> a, 2 -> b
-                return { style: 'a', value: 'a' }; // 负数回退
+                if (startNum === 0) return { style: 'a', value: '&' };
+                if (startNum > 0) return { style: 'a', value: String.fromCharCode('a'.charCodeAt(0) + startNum - 1) };
+                return { style: 'a', value: 'a' };
             }
-            return { style: 'a', value: startValue || 'a' }; // 非数字起始值
+            return { style: 'a', value: startValue || 'a' };
         case '一':
-             if (isNumericStart) {
+            if (isNumericStart) {
+                // 映射数字索引到中文数组
                 if (startNum >= 0 && startNum < chineseNumbers.length) {
-                    return { style: '一', value: chineseNumbers[startNum] }; // 0 -> 零, 1 -> 一
+                    return { style: '一', value: chineseNumbers[startNum] };
                 }
+                // 溢出数组则直接使用数字字符串 (如 '11')
                 if (startNum >= chineseNumbers.length) {
-                    return { style: '一', value: String(startNum) }; // 11 -> '11'
+                    return { style: '一', value: String(startNum) };
                 }
-                return { style: '一', value: '一' }; // 负数回退
+                return { style: '一', value: '一' };
             }
-            return { style: '一', value: startValue || '一' }; // 非数字起始值
+            return { style: '一', value: startValue || '一' };
         case '①':
-             if (isNumericStart) {
+            if (isNumericStart) {
                 if (startNum >= 0 && startNum < circledNumbers.length) {
-                    return { style: '①', value: circledNumbers[startNum] }; // 0 -> ⓪, 1 -> ①
+                    return { style: '①', value: circledNumbers[startNum] };
                 }
-                 if (startNum >= circledNumbers.length) {
-                    return { style: '①', value: String(startNum) }; // 21 -> '21'
+                if (startNum >= circledNumbers.length) {
+                    return { style: '①', value: String(startNum) };
                 }
-                return { style: '①', value: '①' }; // 负数回退
+                return { style: '①', value: '①' };
             }
-            return { style: '①', value: startValue || '①' }; // 非数字起始值
+            return { style: '①', value: startValue || '①' };
     }
-    // 默认回退到数字类型
-    return { style: '1', value: startNum }; // 允许 0
+    // 默认回退到数字样式
+    return { style: '1', value: startNum };
 }
 
 /**
- * 获取给定编号标记的下一个标记。
- * 处理 'Z' -> 'A' (循环), '&' -> 'A' (从0开始), 以及 '十' -> '11' 的逻辑。
- * @param {object} t - 当前编号标记 { style, value }。
- * @returns {object} 下一个编号标记 { style, value }。
+ * 计算下一个编号 Token。
+ * 实现了各样式的自增逻辑。
+ * * @param {{style: string, value: any}} t 当前 Token
+ * @returns {{style: string, value: any}} 下一个 Token
  */
 function nextNumberingToken(t) {
     switch (t.style) {
         case '1':
             return { style: '1', value: t.value + 1 };
         case 'A':
-            if (t.value === '&') return { style: 'A', value: 'A' }; // & (0) -> A (1)
-            if (t.value === 'Z') return { style: 'A', value: 'A' }; // Z -> A (循环)
+            if (t.value === '&') return { style: 'A', value: 'A' }; // & -> A
+            if (t.value === 'Z') return { style: 'A', value: 'A' }; // Z -> A (循环或重置)
             else return { style: 'A', value: String.fromCharCode(t.value.charCodeAt(0) + 1) };
         case 'a':
-            if (t.value === '&') return { style: 'a', value: 'a' }; // & (0) -> a (1)
-            if (t.value === 'z') return { style: 'a', value: 'a' }; // z -> a (循环)
+            if (t.value === '&') return { style: 'a', value: 'a' }; // & -> a
+            if (t.value === 'z') return { style: 'a', value: 'a' }; // z -> a
             else return { style: 'a', value: String.fromCharCode(t.value.charCodeAt(0) + 1) };
         case '一':
             const currentIndex = chineseNumbers.indexOf(t.value);
+            // 在数组范围内递增
             if (currentIndex > -1 && currentIndex < chineseNumbers.length - 1) {
-                return { style: '一', value: chineseNumbers[currentIndex + 1] }; // 零 -> 一 ... 九 -> 十
+                return { style: '一', value: chineseNumbers[currentIndex + 1] };
             }
-            // 处理 '十' -> '11'
+            // 处理边界 '十' -> '11'
             if (currentIndex === chineseNumbers.length - 1) {
                 return { style: '一', value: '11' };
             }
-            // 处理 '11' -> '12' 等
+            // 处理数字形式 '11' -> '12'
             const num = parseInt(t.value);
             if (!isNaN(num)) {
                 return { style: '一', value: String(num + 1) };
             }
-            // 回退
             return { style: '一', value: '一' };
         case '①':
             const circledIndex = circledNumbers.indexOf(t.value);
             if (circledIndex > -1 && circledIndex < circledNumbers.length - 1) {
-                return { style: '①', value: circledNumbers[circledIndex + 1] }; // ⓪ -> ① ... ⑲ -> ⑳
+                return { style: '①', value: circledNumbers[circledIndex + 1] };
             }
-            // 处理 '⑳' -> '21'
+            // 处理边界 '⑳' -> '21'
             if (circledIndex === circledNumbers.length - 1) {
                 return { style: '①', value: '21' };
             }
-            // 处理 '21' -> '22' 等
+            // 处理数字形式 '21' -> '22'
             const circledNum = parseInt(t.value);
             if (!isNaN(circledNum)) {
                 return { style: '①', value: String(circledNum + 1) };
             }
-            // 回退
             return { style: '①', value: '①' };
     }
-    // 默认处理数字
     return { style: '1', value: t.value + 1 };
 }
 
 /**
- * 获取给定编号标记的上一个标记。
- * 处理 'A' -> '&' (0), '&' -> 'Z' (循环), 以及 '11' -> '十' 的逻辑。
- * @param {object} t - 当前编号标记 { style, value }。
- * @returns {object} 上一个编号标记 { style, value }。
+ * 计算上一个编号 Token。
+ * 实现了各样式的自减逻辑，主要用于确定起始状态。
  */
 function previousNumberingToken(t) {
     switch (t.style) {
         case '1':
             return { style: '1', value: t.value - 1 };
         case 'A':
-            if (t.value === 'A') return { style: 'A', value: '&' }; // A (1) -> & (0)
-            if (t.value === '&') return { style: 'A', value: 'Z' }; // & (0) -> Z (循环)
+            if (t.value === 'A') return { style: 'A', value: '&' }; // A -> &
+            if (t.value === '&') return { style: 'A', value: 'Z' }; // & -> Z
             else return { style: 'A', value: String.fromCharCode(t.value.charCodeAt(0) - 1) };
         case 'a':
-            if (t.value === 'a') return { style: 'a', value: '&' }; // a (1) -> & (0)
-            if (t.value === '&') return { style: 'a', value: 'z' }; // & (0) -> z (循环)
+            if (t.value === 'a') return { style: 'a', value: '&' }; // a -> &
+            if (t.value === '&') return { style: 'a', value: 'z' }; // & -> z
             else return { style: 'a', value: String.fromCharCode(t.value.charCodeAt(0) - 1) };
         case '一':
-            // 处理 '12' -> '11'
+            // 处理 '12' -> '11', '11' -> '十'
             const num = parseInt(t.value);
             if (!isNaN(num)) {
                 if (num > 11) return { style: '一', value: String(num - 1) };
                 if (num === 11) return { style: '一', value: '十' };
             }
-            // 处理 '十' -> '九' ... '一' -> '零'
+            // 处理数组内回退
             const currentIndex = chineseNumbers.indexOf(t.value);
             if (currentIndex > 0) {
                 return { style: '一', value: chineseNumbers[currentIndex - 1] };
             }
-            // '零' 或未知值 回退
             return { style: '一', value: '零' };
         case '①':
-            // 处理 '22' -> '21'
+            // 处理 '22' -> '21', '21' -> '⑳'
             const circledNum = parseInt(t.value);
             if (!isNaN(circledNum)) {
                 if (circledNum > 21) return { style: '①', value: String(circledNum - 1) };
                 if (circledNum === 21) return { style: '①', value: '⑳' };
             }
-            // 处理 '⑳' -> '⑲' ... '①' -> '⓪'
+            // 处理数组内回退
             const circledIndex = circledNumbers.indexOf(t.value);
             if (circledIndex > 0) {
                 return { style: '①', value: circledNumbers[circledIndex - 1] };
             }
-            // '⓪' 或未知值 回退
             return { style: '①', value: '⓪' };
     }
-    // 默认处理数字
     return { style: '1', value: t.value - 1 };
 }
 
 /**
- * 将编号标记转换为可打印的字符串。
- * @param {object} t - 编号标记 { style, value }。
- * @returns {string} 可打印的字符串。
+ * 将 Token 转换为可打印字符串。
  */
 function printableNumberingToken(t) {
     switch (t.style) {
         case '1':
             return t.value.toString();
         case 'A':
-            return t.value;
         case 'a':
-            return t.value;
         case '一':
-            return t.value;
         case '①':
             return t.value;
     }
-    // 默认返回数字
     return t.value.toString();
 }
 
 /**
- * 根据编号堆栈和分隔符数组生成完整的多级编号字符串。
- * @param {Array<object>} numberingStack - 编号标记的对象数组。
- * @param {Array<string>} separators - 分隔符数组 (索引0未使用，索引1对应H1-H2，以此类推)。
- * @returns {string} 完整的编号字符串 (例如 " 1-a-i")。
+ * 构建完整的编号字符串。
+ * 根据当前的编号栈和各级分隔符设置，拼接出如 "1.1-A" 这样的字符串。
+ * * @param {Array} numberingStack 编号栈
+ * @param {Array} separators 分隔符数组
+ * @returns {string}
  */
 function makeNumberingString(numberingStack, separators) {
     let numberingString = '';
     for (let i = 0; i < numberingStack.length; i++) {
         if (i === 0) {
-            numberingString += ' '; // H1 前的固定空格
+            numberingString += ' '; // H1 前强制添加空格
         }
         else {
-            // 使用对应级别的分隔符 (separators[1] ... separators[5])
+            // 添加对应层级的分隔符
             numberingString += separators[i] || '';
         }
         numberingString += printableNumberingToken(numberingStack[i]);
@@ -341,121 +369,84 @@ function makeNumberingString(numberingStack, separators) {
 }
 
 /**
- * (此函数在 'main new.js' 中已弃用，但保留以防万一)
- * (原用于处理旧的 'start-at' 设置，现已被 'headingStartValues' 数组取代)
- * @param {string} startAtSettingString - 旧的 'start-at' 值。
- * @param {string} style - 编号样式。
- * @param {string} startValue - 默认起始值。
- * @returns {object} “第零个”编号标记。
+ * 辅助函数：根据设置决定起始值或默认零值。
  */
 function startAtOrZerothInStyle(startAtSettingString, style, startValue) {
-    // 如果 'start-at' 未设置, 返回标准的“第零个”标记
     if (startAtSettingString === '')
         return zerothNumberingTokenInStyle(style, startValue);
-    
     let firstNumberingTokenFromSetting;
-    switch (style) {
-        case '1':
-            if (!isValidArabicNumberingValueString(startAtSettingString))
-                return zerothNumberingTokenInStyle(style, startValue);
-            firstNumberingTokenFromSetting = { style: '1', value: parseInt(startAtSettingString) };
-            break;
-        case 'A':
-            if (!isValidAlphabetNumberingValueString(startAtSettingString)) // (此函数已在 new.js 中移除)
-                return zerothNumberingTokenInStyle(style, startValue);
-            firstNumberingTokenFromSetting = { style: 'A', value: startAtSettingString };
-            break;
-        case 'a':
-            if (!isValidAlphabetNumberingValueString(startAtSettingString.toLowerCase())) // (此函数已在 new.js 中移除)
-                return zerothNumberingTokenInStyle(style, startValue);
-            firstNumberingTokenFromSetting = { style: 'a', value: startAtSettingString };
-            break;
-        default:
-            // 默认处理数字
-            if (!isValidArabicNumberingValueString(startAtSettingString))
-                return zerothNumberingTokenInStyle(style, startValue);
-            firstNumberingTokenFromSetting = { style: '1', value: parseInt(startAtSettingString) };
+
+    // 简化的分支逻辑，主要处理数字和字母的解析
+    if (style === '1' || (!['A', 'a'].includes(style))) {
+        if (!isValidArabicNumberingValueString(startAtSettingString))
+            return zerothNumberingTokenInStyle(style, startValue);
+        firstNumberingTokenFromSetting = { style: '1', value: parseInt(startAtSettingString) };
+    } else if (style === 'A') {
+        if (!isValidAlphabetNumberingValueString(startAtSettingString))
+            return zerothNumberingTokenInStyle(style, startValue);
+        firstNumberingTokenFromSetting = { style: 'A', value: startAtSettingString };
+    } else if (style === 'a') {
+        if (!isValidAlphabetNumberingValueString(startAtSettingString.toLowerCase()))
+            return zerothNumberingTokenInStyle(style, startValue);
+        firstNumberingTokenFromSetting = { style: 'a', value: startAtSettingString };
     }
-    // 将 'start-at' 指定的第一个标记转换为“第零个”标记
+
     return previousNumberingToken(firstNumberingTokenFromSetting);
 }
 
-// --- 默认设置和 Front Matter 解析 ---
+// ====================================================================================
+// 插件配置与 FrontMatter 解析
+// ====================================================================================
 
-// 插件的默认设置
+// 默认设置对象
 const DEFAULT_SETTINGS = {
-    skipTopLevel: false, // (已弃用, 但保留)
-    firstLevel: 1, // 编号起始级别
-    maxLevel: 6, // 编号最深级别
-    auto: false, // 自动为标题编号
-    contents: '', // 目录锚点 (例如 '^toc')
-    skipHeadings: '', // 跳过包含此锚点的标题
-    off: false, // 在此文档中完全禁用
-    equationNumberingMode: 'continuous', // 公式编号模式: 'continuous' 或 'heading-based'
-    autoNumberFormulas: false, // 自动为公式编号
-    refreshInterval: 10, // 自动刷新间隔（秒）
-    // 新的多级样式设置
-    headingStyles: ['1', 'a', 'A', '一', '①', '1'], // 1-6级标题的样式
-    headingSeparators: ['', '-', ':', '.', '—', '-'], // 6 元素数组 (索引0为H1前缀, 索引1为H1-H2分隔符, ...)
-    headingStartValues: ['0', '1', '1', '1', '1', '1'] // 1-6级标题的起始值
+    skipTopLevel: false,         // 是否跳过一级标题 (该字段目前逻辑中保留但UI未暴露)
+    firstLevel: 1,               // 起始编号级别 (H1-H6)
+    maxLevel: 6,                 // 最大编号级别
+    auto: false,                 // 是否开启自动标题编号
+    skipHeadings: '',            // 跳过特定文本结尾的标题
+    off: false,                  // 是否完全关闭插件功能
+    equationNumberingMode: 'continuous', // 公式编号模式: 'continuous'(连续) 或 'heading-based'(基于标题)
+    autoNumberFormulas: false,   // 是否开启自动公式编号
+    refreshInterval: 1000,         // 自动更新检测间隔 (毫秒)
+    headingStyles: ['1', 'a', 'A', '一', '①', '1'], // 1-6级标题的具体样式
+    headingSeparators: ['', '-', ':', '.', '—', '-'], // 1-6级的分隔符 (索引0为H1前缀)
+    headingStartValues: ['0', '1', '1', '1', '1', '1'] // 1-6级的起始值
 };
 
-/**
- * 验证标志位是否为布尔值。
- * @param {*} f - 要验证的值。
- * @returns {boolean}
- */
+// 校验函数集合
 function isValidFlag(f) {
-    if (f === true || f === false)
-        return true;
-    return false;
+    return f === true || f === false;
 }
-
-/**
- * 验证级别设置（1-6）是否有效。
- * @param {*} x - 要验证的值。
- * @returns {boolean}
- */
 function isValidFirstOrMaxLevel(x) {
-    if (typeof x === 'number' && x >= 1 && x <= 6)
-        return true;
-    return false;
+    return typeof x === 'number' && x >= 1 && x <= 6;
 }
-
-/**
- * 验证块ID（锚点）设置是否有效。
- * @param {*} x - 要验证的值。
- * @returns {boolean}
- */
 function isValidBlockIdSetting(x) {
-    if (typeof x === 'string' && (x === '' || x.startsWith('^')))
-        return true;
-    return false;
+    return typeof x === 'string' && (x === '' || x.startsWith('^'));
+}
+function isNonEmptyBlockId(x) {
+    return x.length > 2 && x.startsWith('^');
 }
 
 /**
- * 获取用于匹配标题行中编号前缀的正则表达式。
- * 此正则表达式匹配所有支持的样式和分隔符。
- * @param {*} flags - (已弃用) 旧的标志参数。
- * @returns {RegExp}
+ * 生成用于匹配现有标题编号的正则表达式。
+ * 这是一个能够匹配多级、混合样式（数字、字母、中文、圆圈数字）以及混合分隔符的强大正则。
+ * * 结构解析:
+ * ^\s{0,3}#+( )?               -> 匹配行首的 hash 符号 (H1-H6) 和可选空格
+ * (                            -> 循环组开始
+ * [Token]+ [Separator]+ ( )? -> 匹配 "1." 或 "A-" 等
+ * )* -> 允许重复 (如 "1.1.A.")
+ * ([Token]+)?                  -> 匹配末尾的编号 (如 "1.1.1" 中的最后一个 "1")
+ * ( )? [Separator]? ( )+       -> 匹配编号结束后的分隔符和强制空格
  */
 function getRegexForHeaderString(flags) {
-    // 正则表达式解释:
-    // ^\s{0,4}#+( )?                    // 匹配 "## "
-    // ( ... [.:—\-]+( )?)* // 匹配任意数量的 "编号 + 分隔符" 组 (例如 "1.", "a-")
-    // ([...]+)?                        // 匹配最后一个编号 (例如 "1.a" 中的 "a")
-    // ( )?[.:—\-]?( )+                 // 匹配可选的最后一个分隔符和必需的空格 (例如 ". ")
-    
-    // [0-9a-zA-Z\u4e00-\u9fa5\u2460-\u2473&零⓪] 匹配所有支持的编号字符
-    return /^\s{0,4}#+( )?([0-9a-zA-Z\u4e00-\u9fa5\u2460-\u2473&零⓪]+[.:—\-]+( )?)*([0-9a-zA-Z\u4e00-\u9fa5\u2460-\u2473&零⓪]+)?( )?[.:—\-]?( )+/g;
+    return /^\s{0,3}#+( )?([0-9a-zA-Z\u4e00-\u9fa5\u2460-\u2473&⓪]+[.:—\-]+( )?)*([0-9a-zA-Z\u4e00-\u9fa5\u2460-\u2473&⓪]+)?( )?[.:—\-]?( )+/g;
 }
 
 /**
- * 在标题行中查找编号前缀的范围 (从行首到编号后的空格)。
- * @param {string} lineText - 标题行文本。
- * @param {number} lineNumber - 行号。
- * @param {*} flags - (已弃用) 旧的标志参数。
- * @returns {obsidian.EditorRange | undefined} 范围对象，如果未找到匹配项则返回 undefined。
+ * 在标题行中查找编号前缀的范围。
+ * 用于确定需要替换文本的起始和结束位置。
+ * * @returns {{from: {line, ch}, to: {line, ch}} | undefined}
  */
 function findRangeInHeaderString(lineText, lineNumber, flags) {
     const regex = getRegexForHeaderString(flags);
@@ -463,7 +454,7 @@ function findRangeInHeaderString(lineText, lineNumber, flags) {
         return undefined;
     const matches = lineText.match(regex);
     if (matches && matches.length !== 1) {
-        // eslint-disable-next-line no-console
+        // 调试日志：发现意外的标题格式
         console.log("Unexpected heading format: '" + lineText + "'");
         return undefined;
     }
@@ -479,27 +470,23 @@ function findRangeInHeaderString(lineText, lineNumber, flags) {
     return { from, to };
 }
 
-// (旧的 updateSettingsFromFrontMatterFormatPart 函数已在此版本中删除)
-
-// Front Matter 键名常量
+// FrontMatter 键名常量
 const AUTO_PART_KEY = 'auto';
 const FIRST_LEVEL_PART_KEY = 'first-level';
 const MAX_LEVEL_PART_KEY = 'max';
-const CONTENTS_PART_KEY = 'contents';
 const SKIP_PART_KEY = 'skip';
-// const START_AT_PART_KEY = 'start-at'; // (已弃用)
+const START_AT_PART_KEY = 'start-at';
 const OFF_PART_KEY = 'off';
 
-// 新格式的正则表达式
+// FrontMatter 值校验正则
 const rangeRegex = /^\d-\d$/; // e.g., "1-6"
 const stylesRegex = /^[0-9aA\u4e00-\u9fa5\u2460-\u2473]{6}$/; // e.g., "1aA一①1"
 const startValuesRegex = /^\d{6}$/; // e.g., "011111"
-const separatorsRegex = /^[-:.—]{5}$/; // e.g., "-:.—-"
+const separatorsRegex = /^[-:.—]{5}$/; // e.g., "-:.—-" (5个字符)
 
 /**
- * 解析 Front Matter 中的 'number headings' 紧凑格式设置。
- * @param {object} fm - Obsidian 的 Front Matter 对象。
- * @returns {object | undefined} 解析后的设置对象，如果 'number headings' 不存在则返回 undefined。
+ * 解析 FrontMatter 中的 'number headings' 属性。
+ * 该属性使用紧凑格式存储设置，例如: "auto, 1-6, 111111, ......"
  */
 function parseCompactFrontMatterSettings(fm) {
     const entry = obsidian.parseFrontMatterEntry(fm, 'number headings');
@@ -508,56 +495,32 @@ function parseCompactFrontMatterSettings(fm) {
         const parts = entryString.split(',');
         let settings = Object.assign({}, DEFAULT_SETTINGS);
 
-        // 跟踪已解析的新格式部分，以防重复解析
+        // 状态标志，防止重复解析
         let rangeFound = false;
         let stylesFound = false;
         let separatorsFound = false;
         let startValuesFound = false;
-        
+
         for (const part of parts) {
             const trimmedPart = part.trim();
             if (trimmedPart.length === 0)
                 continue;
-            
+
             if (trimmedPart === OFF_PART_KEY) {
                 settings.off = true;
             }
             else if (trimmedPart === AUTO_PART_KEY) {
                 settings.auto = true;
             }
-            else if (trimmedPart === 'auto-formulas') {
-                settings.autoNumberFormulas = true;
-            }
             else if (trimmedPart.startsWith(FIRST_LEVEL_PART_KEY)) {
                 const nstring = trimmedPart.substring(FIRST_LEVEL_PART_KEY.length + 1);
                 const n = parseInt(nstring);
-                if (isValidFirstOrMaxLevel(n)) {
-                    settings.firstLevel = n;
-                }
+                if (isValidFirstOrMaxLevel(n)) settings.firstLevel = n;
             }
             else if (trimmedPart.startsWith(MAX_LEVEL_PART_KEY)) {
                 const nstring = trimmedPart.substring(MAX_LEVEL_PART_KEY.length + 1);
                 const n = parseInt(nstring);
-                if (isValidFirstOrMaxLevel(n)) {
-                    settings.maxLevel = n;
-                }
-            }
-            // (已移除 'start-at' 解析逻辑)
-            else if (trimmedPart.startsWith(CONTENTS_PART_KEY)) {
-                if (trimmedPart.length <= CONTENTS_PART_KEY.length + 1)
-                    continue;
-                const tocHeadingBlockIdName = trimmedPart.substring(CONTENTS_PART_KEY.length + 1);
-                if (isValidBlockIdSetting(tocHeadingBlockIdName)) {
-                    settings.contents = tocHeadingBlockIdName;
-                }
-            }
-            else if (trimmedPart.startsWith(SKIP_PART_KEY)) {
-                if (trimmedPart.length <= SKIP_PART_KEY.length + 1)
-                    continue;
-                const skipHeadingBlockIdName = trimmedPart.substring(SKIP_PART_KEY.length + 1);
-                if (isValidBlockIdSetting(skipHeadingBlockIdName)) {
-                    settings.skipHeadings = skipHeadingBlockIdName;
-                }
+                if (isValidFirstOrMaxLevel(n)) settings.maxLevel = n;
             }
             else if (trimmedPart.startsWith('equation-mode')) {
                 const mode = trimmedPart.substring('equation-mode'.length + 1);
@@ -566,7 +529,7 @@ function parseCompactFrontMatterSettings(fm) {
                 }
             }
             else if (!rangeFound && rangeRegex.test(trimmedPart)) {
-                // 1. 解析级别范围 (例如: "1-6")
+                // 解析 "1-6" 格式的层级范围
                 const rangeParts = trimmedPart.split('-');
                 if (rangeParts.length === 2) {
                     const first = parseInt(rangeParts[0]);
@@ -577,23 +540,21 @@ function parseCompactFrontMatterSettings(fm) {
                 }
             }
             else if (!stylesFound && stylesRegex.test(trimmedPart)) {
-                // 2. 解析样式 (例如: "1aA一①1")
+                // 解析 6字符样式串
                 settings.headingStyles = trimmedPart.split('');
                 stylesFound = true;
             }
             else if (!startValuesFound && startValuesRegex.test(trimmedPart)) {
-                // 3. 解析起始值 (例如: "011111")
+                // 解析 6字符起始值串
                 settings.headingStartValues = trimmedPart.split('');
                 startValuesFound = true;
             }
             else if (!separatorsFound && separatorsRegex.test(trimmedPart)) {
-                // 4. 解析分隔符 (例如: "-:.—-" 5个字符)
+                // 解析 5字符分隔符串 (映射到索引 1-5)
                 const seps = trimmedPart.split('');
-                // 映射到 6 元素数组的索引 1-5
                 settings.headingSeparators = ['', seps[0], seps[1], seps[2], seps[3], seps[4]];
                 separatorsFound = true;
             }
-            // (已移除旧格式的回退逻辑)
         }
         return settings;
     }
@@ -601,9 +562,8 @@ function parseCompactFrontMatterSettings(fm) {
 }
 
 /**
- * 解析 Front Matter 中的 'number formulas' 紧凑格式设置。
- * @param {object} fm - Obsidian 的 Front Matter 对象。
- * @returns {object | undefined} 解析后的公式设置对象，如果 'number formulas' 不存在则返回 undefined。
+ * 解析 FrontMatter 中的 'number formulas' 属性。
+ * 独立处理公式相关的自动编号和模式设置。
  */
 function parseFormulasFrontMatterSettings(fm) {
     const entry = obsidian.parseFrontMatterEntry(fm, 'number formulas');
@@ -631,20 +591,19 @@ function parseFormulasFrontMatterSettings(fm) {
 }
 
 /**
- * 从 Front Matter 获取设置，如果 Front Matter 中没有，则使用插件的全局设置。
- * @param {object} data - 视图的元数据 (包含 frontmatter)。
- * @param {object} alternativeSettings - 插件的全局默认设置。
- * @returns {object} 最终应用的设置对象。
+ * 获取最终生效的设置。
+ * 优先从 FrontMatter 获取，如果不存在则使用默认值或传入的替代设置。
+ * 并且会将 'number formulas' 的设置合并进来。
  */
 const getFrontMatterSettingsOrAlternative = ({ frontmatter }, alternativeSettings) => {
     if (frontmatter !== undefined) {
-        // 1. 尝试解析 'number headings'
+        // 解析标题设置
         const decompactedSettings = parseCompactFrontMatterSettings(frontmatter);
-        // 2. 尝试解析 'number formulas'
+        // 解析公式设置
         const formulasSettings = parseFormulasFrontMatterSettings(frontmatter);
-        
+
         if (decompactedSettings !== undefined) {
-            // 如果 'number headings' 存在, 将 'number formulas' 的设置合并进去
+            // 合并
             if (formulasSettings !== undefined) {
                 Object.assign(decompactedSettings, {
                     autoNumberFormulas: formulasSettings.autoNumberFormulas,
@@ -653,227 +612,200 @@ const getFrontMatterSettingsOrAlternative = ({ frontmatter }, alternativeSetting
             }
             return decompactedSettings;
         }
-        
-        // (已移除旧的向后兼容性代码)
-        
-        // 3. 如果 'number headings' 不存在, 检查 'number formulas' 是否单独存在
+
+        // 如果只有公式设置
         if (formulasSettings !== undefined) {
-             return Object.assign(Object.assign({}, alternativeSettings), {
+            return Object.assign(Object.assign({}, alternativeSettings), {
                 autoNumberFormulas: formulasSettings.autoNumberFormulas,
                 equationNumberingMode: formulasSettings.equationNumberingMode
             });
         }
-        
-        // 4. 如果两者都不存在，返回全局设置
+
         return alternativeSettings;
     }
     else {
-        // 没有 frontmatter，返回全局设置
         return alternativeSettings;
     }
 };
 
 /**
- * 将设置对象转换为用于 'number headings' 的紧凑字符串。
- * @param {object} settings - 设置对象。
- * @returns {string} 写入 Front Matter 的字符串值。
+ * 将设置对象序列化为 'number headings' 的紧凑字符串。
  */
 function settingsToCompactFrontMatterValue(settings) {
-    if (settings.off)
-        return OFF_PART_KEY;
+    if (settings.off) return OFF_PART_KEY;
 
     const parts = [];
 
-    if (settings.auto)
-        parts.push('auto');
-    if (settings.autoNumberFormulas)
-        parts.push('auto-formulas');
+    if (settings.auto) parts.push('auto');
 
-    // 级别范围 (始终写入)
-    parts.push(`${settings.firstLevel || 1}-${settings.maxLevel || 6}`);
-
-    // 样式 (始终写入)
-    if (settings.headingStyles && settings.headingStyles.length >= 6) {
-        parts.push(settings.headingStyles.join('')); // e.g., "1aA一①1"
+    // 序列化级别范围
+    if (settings.firstLevel !== 1 || settings.maxLevel !== 6) {
+        parts.push(`${settings.firstLevel}-${settings.maxLevel}`);
     } else {
-        parts.push('1aA一①1'); // 默认
+        parts.push('1-6');
     }
 
-    // 分隔符 (始终写入, 5个字符)
+    // 序列化样式
+    if (settings.headingStyles && settings.headingStyles.length >= 6) {
+        parts.push(settings.headingStyles.join(''));
+    } else {
+        parts.push('1aA一①1');
+    }
+
+    // 序列化分隔符 (取索引1-5)
     if (settings.headingSeparators && settings.headingSeparators.length >= 6) {
         const sepsToSave = settings.headingSeparators.slice(1, 6);
-        parts.push(sepsToSave.join('')); // e.g., "-:._—"
+        parts.push(sepsToSave.join(''));
     } else {
-        parts.push(DEFAULT_SETTINGS.headingSeparators.slice(1, 6).join('')); // 默认
+        parts.push(DEFAULT_SETTINGS.headingSeparators.slice(1, 6).join(''));
     }
 
-    // 起始值 (始终写入)
+    // 序列化起始值
     if (settings.headingStartValues && settings.headingStartValues.length >= 6) {
-        parts.push(settings.headingStartValues.join('')); // e.g., "011111"
+        parts.push(settings.headingStartValues.join(''));
     } else {
-        parts.push('011111'); // 默认
+        parts.push('011111');
     }
-
-    // 可选设置
-    if (settings.contents && settings.contents.length > 0)
-        parts.push(`contents ${settings.contents}`);
-    if (settings.skipHeadings && settings.skipHeadings.length > 0)
-        parts.push(`skip ${settings.skipHeadings}`);
-
-    // (已移除 'start-at' 保存逻辑)
 
     return parts.join(', ');
 }
 
 /**
- * 将设置对象转换为用于 'number formulas' 的紧凑字符串。
- * @param {object} settings - 设置对象。
- * @returns {string} 写入 Front Matter 的字符串值。
+ * 将设置对象序列化为 'number formulas' 的紧凑字符串。
  */
 function formulasSettingsToCompactFrontMatterValue(settings) {
-    if (settings.off)
-        return OFF_PART_KEY;
+    if (settings.off) return OFF_PART_KEY;
 
     const parts = [];
-    
-    if (settings.autoNumberFormulas)
-        parts.push('auto');
 
-    // 始终写入模式
-    parts.push(settings.equationNumberingMode || 'continuous');
-    
+    if (settings.autoNumberFormulas) parts.push('auto');
+
+    if (settings.equationNumberingMode !== 'continuous') {
+        parts.push(settings.equationNumberingMode);
+    } else {
+        parts.push('continuous');
+    }
+
     return parts.join(', ');
 }
 
 /**
- * 将设置保存回当前文件的 Front Matter。
- * @param {obsidian.FileManager} fileManager - Obsidian 文件管理器。
- * @param {obsidian.TFile} file - 当前文件。
- * @param {object} settings - 要保存的设置对象。
+ * 保存设置到文件的 FrontMatter。
  */
 const saveSettingsToFrontMatter = (fileManager, file, settings) => {
     fileManager.processFrontMatter(file, frontmatter => {
-        // 保存标题设置
         const v = settingsToCompactFrontMatterValue(settings);
         frontmatter['number headings'] = v;
-        
-        // 保存公式设置到独立属性
+
         const formulasValue = formulasSettingsToCompactFrontMatterValue(settings);
         frontmatter['number formulas'] = formulasValue;
     });
 };
 
-// --- UI：编号控制模态框 ---
+// ====================================================================================
+// 编号控制面板 (UI)
+// ====================================================================================
 
 /**
- * 编号控制面板的模态框（Modal）。
- * 提供手动操作和自动编号设置的UI。
+ * 编号控制面板模态框。
+ * 提供图形化界面供用户调整编号设置（样式、分隔符、范围、模式等），
+ * 并执行手动编号或保存自动编号设置。
  */
 class NumberingControlModal extends obsidian.Modal {
     constructor(app, config) {
         super(app);
-        this.config = config; // { settings, controlCallback }
-        // 从传入的设置初始化UI状态
+        this.config = config;
+        // 初始化本地状态，拷贝当前设置
         this.autoHeadings = config.settings.auto || false;
         this.autoFormulas = config.settings.autoNumberFormulas || false;
         this.equationMode = config.settings.equationNumberingMode || 'continuous';
         this.firstLevel = config.settings.firstLevel || 1;
         this.maxLevel = config.settings.maxLevel || 6;
-        // 确保数组长度为 6，防止设置不完整
+        // 确保数组切片安全
         this.headingStyles = (config.settings.headingStyles || DEFAULT_SETTINGS.headingStyles).slice(0, 6);
         this.headingSeparators = (config.settings.headingSeparators || DEFAULT_SETTINGS.headingSeparators).slice(0, 6);
         this.headingStartValues = (config.settings.headingStartValues || DEFAULT_SETTINGS.headingStartValues).slice(0, 6);
     }
-    
+
     onOpen() {
         const { contentEl, titleEl } = this;
         titleEl.setText('编号控制面板');
-        
-        // --- 1. 创建标签页切换 ---
+
+        // --- 顶部标签页切换 ---
         const tabs = contentEl.createEl('div', { cls: 'numbering-control-tabs' });
         const tabHeadings = tabs.createEl('button', { text: '手动编号' });
         const tabSettings = tabs.createEl('button', { text: '自动编号设置' });
-        
+
         const headingsTabContent = contentEl.createEl('div', { cls: 'numbering-tab-content' });
         const settingsTabContent = contentEl.createEl('div', { cls: 'numbering-tab-content', attr: { style: 'display: none;' } });
-        
-        // 标签页切换逻辑
+
+        // 标签页逻辑
         tabHeadings.onclick = () => {
             headingsTabContent.style.display = 'block';
             settingsTabContent.style.display = 'none';
-            tabHeadings.className = 'mod-cta'; // 高亮
+            tabHeadings.className = 'mod-cta';
             tabSettings.className = '';
         };
-        
+
         tabSettings.onclick = () => {
             headingsTabContent.style.display = 'none';
             settingsTabContent.style.display = 'block';
             tabHeadings.className = '';
-            tabSettings.className = 'mod-cta'; // 高亮
+            tabSettings.className = 'mod-cta';
         };
-        
-        // --- 2. 手动编号选项卡内容 ---
+
+        // --- 1. 手动编号选项卡 ---
         headingsTabContent.createEl('h3', { text: '手动编号选项' });
-        
         const manualButtonsContainer = headingsTabContent.createEl('div', { cls: 'numbering-buttons-container' });
-        
-        const numberHeadingsButton = manualButtonsContainer.createEl('button', { text: '为标题编号' });
-        numberHeadingsButton.onclick = () => {
+
+        // 按钮：仅标题
+        manualButtonsContainer.createEl('button', { text: '为标题编号' }).onclick = () => {
             this.config.controlCallback('number-headings');
             this.close();
         };
-        
-        const numberFormulasButton = manualButtonsContainer.createEl('button', { text: '为公式编号' });
-        numberFormulasButton.onclick = () => {
+        // 按钮：仅公式
+        manualButtonsContainer.createEl('button', { text: '为公式编号' }).onclick = () => {
             this.config.controlCallback('number-formulas');
             this.close();
         };
-        
-        const numberBothButton = manualButtonsContainer.createEl('button', { text: '为标题和公式编号' });
-        numberBothButton.onclick = () => {
+        // 按钮：全部
+        manualButtonsContainer.createEl('button', { text: '为标题和公式编号' }).onclick = () => {
             this.config.controlCallback('number-both');
             this.close();
         };
-        
-        const removeNumberingButton = manualButtonsContainer.createEl('button', { text: '删除所有编号' });
-        removeNumberingButton.onclick = () => {
+        // 按钮：移除
+        manualButtonsContainer.createEl('button', { text: '删除所有编号' }).onclick = () => {
             this.config.controlCallback('remove-numbering');
             this.close();
         };
-        
-        // --- 3. 自动编号设置选项卡内容 ---
+
+        // --- 2. 自动编号设置选项卡 ---
         settingsTabContent.createEl('h3', { text: '自动编号设置' });
-        
-        // 自动标题编号开关
+
+        // 开关：自动标题
         const autoHeadingsSetting = settingsTabContent.createEl('div', { cls: 'setting-item' });
         autoHeadingsSetting.createEl('label', { text: '自动为标题编号' });
         const autoHeadingsToggle = autoHeadingsSetting.createEl('input', { type: 'checkbox' });
         autoHeadingsToggle.checked = this.autoHeadings;
-        autoHeadingsToggle.onchange = (e) => {
-            this.autoHeadings = e.target.checked;
-        };
-        
-        // 自动公式编号开关
+        autoHeadingsToggle.onchange = (e) => { this.autoHeadings = e.target.checked; };
+
+        // 开关：自动公式
         const autoFormulasSetting = settingsTabContent.createEl('div', { cls: 'setting-item' });
         autoFormulasSetting.createEl('label', { text: '自动为公式编号' });
         const autoFormulasToggle = autoFormulasSetting.createEl('input', { type: 'checkbox' });
         autoFormulasToggle.checked = this.autoFormulas;
-        autoFormulasToggle.onchange = (e) => {
-            this.autoFormulas = e.target.checked;
-        };
-        
-        // 公式编号模式选择
+        autoFormulasToggle.onchange = (e) => { this.autoFormulas = e.target.checked; };
+
+        // 选择：公式模式
         const equationModeSetting = settingsTabContent.createEl('div', { cls: 'setting-item' });
         equationModeSetting.createEl('label', { text: '公式编号模式' });
         const equationModeSelect = equationModeSetting.createEl('select');
-        equationModeSelect.createEl('option', { text: '连续编号', value: 'continuous' });
-        equationModeSelect.createEl('option', { text: '基于标题编号', value: 'heading-based' });
+        equationModeSelect.createEl('option', { text: '连续编号' }).value = 'continuous';
+        equationModeSelect.createEl('option', { text: '基于标题编号' }).value = 'heading-based';
         equationModeSelect.value = this.equationMode;
-        equationModeSelect.onchange = (e) => {
-            this.equationMode = e.target.value;
-        };
-        
-        // 编号范围设置
+        equationModeSelect.onchange = (e) => { this.equationMode = e.target.value; };
+
+        // 输入：层级范围
         const rangeSetting = settingsTabContent.createEl('div', { cls: 'setting-item' });
         rangeSetting.createEl('label', { text: '编号范围（第一级-最大级）' });
         const rangeContainer = rangeSetting.createEl('div');
@@ -881,76 +813,57 @@ class NumberingControlModal extends obsidian.Modal {
         firstLevelInput.value = String(this.firstLevel);
         firstLevelInput.onchange = (e) => {
             const value = parseInt(e.target.value);
-            if (!isNaN(value) && value >= 1 && value <= 6) {
-                this.firstLevel = value;
-            }
+            if (!isNaN(value) && value >= 1 && value <= 6) this.firstLevel = value;
         };
         rangeContainer.createEl('span', { text: ' - ' });
         const maxLevelInput = rangeContainer.createEl('input', { type: 'number', attr: { min: 1, max: 6, style: 'width: 50px;' } });
         maxLevelInput.value = String(this.maxLevel);
         maxLevelInput.onchange = (e) => {
             const value = parseInt(e.target.value);
-            if (!isNaN(value) && value >= 1 && value <= 6) {
-                this.maxLevel = value;
-            }
+            if (!isNaN(value) && value >= 1 && value <= 6) this.maxLevel = value;
         };
-        
-        // 各级标题类型（下拉菜单）
+
+        // 选择：各级样式
         const headingStylesSetting = settingsTabContent.createEl('div', { cls: 'setting-item' });
         headingStylesSetting.createEl('label', { text: '各级标题类型（1-6级）' });
         const headingStylesContainer = headingStylesSetting.createEl('div', { cls: 'numbering-styles-container' });
         const styleOptions = ['1', 'a', 'A', '一', '①'];
         for (let i = 0; i < 6; i++) {
             const styleSelect = headingStylesContainer.createEl('select');
-            styleOptions.forEach(option => {
-                styleSelect.createEl('option', { text: option, value: option });
-            });
+            styleOptions.forEach(option => { styleSelect.createEl('option', { text: option, value: option }); });
             styleSelect.value = this.headingStyles[i] || '1';
-            styleSelect.onchange = (e) => {
-                this.headingStyles[i] = e.target.value;
-            };
+            styleSelect.onchange = (e) => { this.headingStyles[i] = e.target.value; };
         }
-        
-        // 各级分隔符样式（下拉菜单）
+
+        // 选择：各级分隔符
         const separatorsSetting = settingsTabContent.createEl('div', { cls: 'setting-item' });
         separatorsSetting.createEl('label', { text: '各级分隔符样式（H1-H2 ... H5-H6）' });
         const separatorsContainer = separatorsSetting.createEl('div', { cls: 'numbering-separators-container' });
         const separatorOptions = [
-            { text: '短横线 (-)', value: '-' },
-            { text: '冒号 (:)', value: ':' },
-            { text: '点 (.)', value: '.' },
-            { text: '长横线 (—)', value: '—' }
+            { text: '短横线 (-)', value: '-' }, { text: '冒号 (:)', value: ':' },
+            { text: '点 (.)', value: '.' }, { text: '长横线 (—)', value: '—' }
         ];
-        // 只显示 5 个分隔符 (索引 1 到 5)
         for (let i = 1; i <= 5; i++) {
             const separatorSelect = separatorsContainer.createEl('select');
-            separatorOptions.forEach(option => {
-                separatorSelect.createEl('option', { text: option.text, value: option.value });
-            });
+            separatorOptions.forEach(option => { separatorSelect.createEl('option', { text: option.text, value: option.value }); });
             separatorSelect.value = this.headingSeparators[i] || '-';
-            separatorSelect.onchange = (e) => {
-                this.headingSeparators[i] = e.target.value;
-            };
+            separatorSelect.onchange = (e) => { this.headingSeparators[i] = e.target.value; };
         }
 
-        // 各级起始编号值（单独输入框）
+        // 输入：各级起始值
         const startValuesSetting = settingsTabContent.createEl('div', { cls: 'setting-item' });
         startValuesSetting.createEl('label', { text: '各级起始编号值（1-6级）' });
         const startValuesContainer = startValuesSetting.createEl('div', { cls: 'numbering-start-values-container' });
         for (let i = 0; i < 6; i++) {
             const startValueInput = startValuesContainer.createEl('input', { type: 'text', attr: { style: 'width: 40px; margin-right: 5px;' } });
             startValueInput.value = this.headingStartValues[i] || '1';
-            startValueInput.onchange = (e) => {
-                // 只取第一个字符
-                this.headingStartValues[i] = e.target.value.charAt(0) || '0';
-            };
+            startValueInput.onchange = (e) => { this.headingStartValues[i] = e.target.value.charAt(0) || '0'; };
         }
 
-        // 保存设置按钮
+        // 提交按钮
         const saveSettingsButton = settingsTabContent.createEl('button', { text: '保存自动编号设置并应用一次' });
         saveSettingsButton.className = 'mod-cta';
         saveSettingsButton.onclick = () => {
-            // 收集所有设置
             const options = {
                 auto: this.autoHeadings,
                 autoNumberFormulas: this.autoFormulas,
@@ -961,15 +874,14 @@ class NumberingControlModal extends obsidian.Modal {
                 headingSeparators: this.headingSeparators,
                 headingStartValues: this.headingStartValues
             };
-            // 通过回调函数将设置传递出去
             this.config.controlCallback('set-auto', options);
             this.close();
         };
-        
-        // 默认激活手动编号选项卡
+
+        // 默认激活
         tabHeadings.click();
     }
-    
+
     onClose() {
         const { contentEl, titleEl } = this;
         contentEl.empty();
@@ -978,19 +890,16 @@ class NumberingControlModal extends obsidian.Modal {
 }
 
 /**
- * 显示编号控制面板。
- * @param {obsidian.App} app - Obsidian App 实例。
- * @param {object} settings - 当前文档应用的设置。
+ * 显示编号控制面板并处理回调逻辑。
  */
 function showNumberingControlPanel(app, settings) {
-    // 定义模态框的回调函数
     const controlCallback = (action, options) => {
         const file = app.workspace.getActiveFile();
         if (!file) return;
-        
+
         const viewInfo = getViewInfo(app);
         if (!viewInfo) return;
-        
+
         switch (action) {
             case 'number-headings':
                 updateHeadingNumbering(viewInfo, settings);
@@ -1005,65 +914,49 @@ function showNumberingControlPanel(app, settings) {
             case 'remove-numbering':
                 removeHeadingNumbering(viewInfo);
                 removeEquationNumbering(viewInfo);
-                // 同时从 Front Matter 中删除设置
+                // 清除 FrontMatter
                 app.fileManager.processFrontMatter(file, (frontmatter) => {
                     delete frontmatter['number headings'];
                     delete frontmatter['number formulas'];
                 });
                 break;
             case 'set-auto':
-                // 保存设置到 Front Matter 并立即应用一次
+                // 保存设置并立即应用
                 const newSettings = Object.assign({}, settings, options);
                 saveSettingsToFrontMatter(app.fileManager, file, newSettings);
-                
                 if (newSettings.auto) {
                     updateHeadingNumbering(viewInfo, newSettings);
                 }
                 if (newSettings.autoNumberFormulas) {
                     updateEquationNumbering(viewInfo, newSettings);
                 }
-                // 延迟更新目录，确保标题编号已应用
-                setTimeout(() => {
-                    const postNumberingViewInfo = getViewInfo(app);
-                    // 使用插件全局设置中的目录锚点值 (contents)
-                    const finalSettings = Object.assign({}, newSettings, { contents: app.plugins.getPlugin('number-adder-obsidian').settings.contents });
-                    updateTableOfContents(postNumberingViewInfo, finalSettings);
-                }, 3000); // 3秒延迟
                 break;
         }
     };
-    
+
     const config = {
         message: `编号控制面板`,
         settings: settings,
         controlCallback
     };
-    
+
     const leaf = app.workspace.activeLeaf;
     if (leaf) {
         new NumberingControlModal(app, config).open();
     }
 }
 
-/**
- * (已弃用) 旧的完成消息函数，现在重定向到控制面板。
- * @param {obsidian.App} app
- * @param {object} settings
- */
 function showNumberingDoneMessage(app, settings) {
-    // 直接调用新的控制面板
     showNumberingControlPanel(app, settings);
 }
 
-// --- 目录 (TOC) 辅助函数 ---
-
-const TOC_LIST_ITEM_BULLET = '-'; // 目录使用的列表项符号
+// ====================================================================================
+// 文本处理与更新逻辑 (核心功能)
+// ====================================================================================
 
 /**
- * 获取标题行的哈希（#）部分。
- * @param {obsidian.Editor} editor
- * @param {obsidian.HeadingCache} heading - 标题缓存对象。
- * @returns {string | undefined} 例如 "##" 或 "###"，如果未找到则返回 undefined。
+ * 从标题对象中提取 "## " 前缀字符串。
+ * 用于保留原本的 hash 符号和缩进。
  */
 function makeHeadingHashString(editor, heading) {
     const regex = /^\s{0,4}#+/g;
@@ -1074,7 +967,6 @@ function makeHeadingHashString(editor, heading) {
     if (!matches)
         return undefined;
     if (matches.length !== 1) {
-        // eslint-disable-next-line no-console
         console.log("Unexpected heading format: '" + headingLineString + "'");
         return undefined;
     }
@@ -1083,11 +975,7 @@ function makeHeadingHashString(editor, heading) {
 }
 
 /**
- * (重复函数定义) 查找标题前缀范围。
- * @param {obsidian.Editor} editor
- * @param {obsidian.HeadingCache} heading
- * @param {*} flags - (已弃用)
- * @returns {obsidian.EditorRange | undefined}
+ * 包装函数：在编辑器中查找特定标题的编号前缀范围。
  */
 function findHeadingPrefixRange(editor, heading, flags) {
     const lineNumber = heading.position.start.line;
@@ -1096,52 +984,13 @@ function findHeadingPrefixRange(editor, heading, flags) {
 }
 
 /**
- * 清理标题文本，移除用于目录链接的锚点。
- * @param {string} htext - 原始标题文本 (例如 "标题 ^anchor")。
- * @returns {string} 清理后的文本 (例如 "标题")。
- */
-function cleanHeadingTextForToc(htext) {
-    if (htext.contains('^')) {
-        const x = htext.split('^');
-        if (x.length > 1) {
-            return x[0].trim();
-        }
-    }
-    return htext.trim();
-}
-
-/**
- * 为单个标题创建目录列表项字符串。
- * @param {obsidian.HeadingCache} h - 标题缓存对象。
- * @param {object} settings - (未使用) 设置对象。
- * @param {number} initialHeadingLevel - 文档的起始标题级别（用于计算缩进）。
- * @returns {string} 格式化的目录行 (例如 "	- [[#标题|标题]]")。
- */
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
-function createTocEntry(h, settings, initialHeadingLevel) {
-    const text = h.heading;
-    const cleanText = cleanHeadingTextForToc(text);
-    let bulletIndent = '';
-    const startLevel = initialHeadingLevel;
-    // 根据级别差计算缩进
-    for (let i = startLevel; i < h.level; i++) {
-        bulletIndent += '\t';
-    }
-    const entryLink = `[[#${text}|${cleanText}]]`; // 创建内部链接
-    return bulletIndent + TOC_LIST_ITEM_BULLET + ' ' + entryLink;
-}
-
-/**
- * 经济地替换编辑器中的范围。
- * 仅在文本确实发生更改时才执行替换，以避免污染撤销历史记录。
- * @param {obsidian.Editor} editor
- * @param {Array<object>} changes - 更改事务数组。
- * @param {obsidian.EditorRange} range - 要替换的范围。
- * @param {string} text - 新文本。
+ * 经济地替换文本范围。
+ * 仅在文本发生实际变化时才生成 change 对象，以防止污染撤销栈。
  */
 function replaceRangeEconomically(editor, changes, range, text) {
     const previousText = editor.getRange(range.from, range.to);
     if (previousText !== text) {
+
         changes.push({
             text: text,
             from: range.from,
@@ -1150,76 +999,64 @@ function replaceRangeEconomically(editor, changes, range, text) {
     }
 }
 
-// --- 核心编号功能 ---
-
 /**
- * 更新文档中所有标题的编号。
- * @param {object} viewInfo - 活动视图信息 { editor, data }。
- * @param {object} settings - 应用的设置。
+ * 更新文档中的标题编号。
+ * 这是插件的核心逻辑函数之一。
+ * * 算法概述:
+ * 1. 遍历所有标题。
+ * 2. 维护一个 `numberingStack` 栈，记录当前各级标题的 Token。
+ * 3. 如果当前标题层级 > 上一个: 压入栈 (Push)，使用对应层级的起始值。
+ * 4. 如果当前标题层级 < 上一个: 弹出栈 (Pop) 直到匹配，然后递增栈顶。
+ * 5. 如果当前标题层级 = 上一个: 递增栈顶。
+ * 6. 生成编号字符串并替换原有前缀。
+ * * @returns {boolean} 如果发生了任何更改，返回 true
  */
 const updateHeadingNumbering = (viewInfo, settings) => {
     var _a;
     if (!viewInfo)
-        return;
+        return false;
     const headings = (_a = viewInfo.data.headings) !== null && _a !== void 0 ? _a : [];
     const editor = viewInfo.editor;
-    
-    const supportFlags = { alphabet: true, roman: true }; // (已弃用, 仅为传递)
-    
-    let previousLevel = 1;
-    // 使用新的多级样式和起始值系统
+
+    const supportFlags = { alphabet: true, roman: true };
+
+    // 获取样式和起始值配置
     const headingStyles = settings.headingStyles || DEFAULT_SETTINGS.headingStyles;
     const headingStartValues = settings.headingStartValues || DEFAULT_SETTINGS.headingStartValues;
-    
-    // --- 起始值逻辑 ---
-    // 1. 获取 H1 的第一个 token (例如 '0' -> '零')
-    let firstToken = firstNumberingTokenInStyle(headingStyles[0], headingStartValues[0]);
-    // 2. 获取 H1 的 "zeroth" token (即第一个 token 之前的一个)
-    let zerothToken = previousNumberingToken(firstToken);
-    
-    // (已移除旧的 'startAt' 覆盖逻辑)
-    
-    let numberingStack = [zerothToken]; // 初始化编号堆栈
-    // --- 结束起始值逻辑 ---
-    
-    if (settings.firstLevel > 1) {
-        previousLevel = settings.firstLevel;
-    }
 
-    const changes = []; // 批量更改数组
+    // 状态初始化
+    let previousLevel = settings.firstLevel - 1;
+    let numberingStack = [];
+
+    const changes = [];
     for (const heading of headings) {
         const level = heading.level;
 
-        // 1. 处理跳过的级别 (低于 firstLevel)
+        // 1. 处理跳过的层级 (settings.firstLevel 之前的)
         if (settings.firstLevel > level) {
-            // 重置编号堆栈
-            let firstToken = firstNumberingTokenInStyle(headingStyles[0], headingStartValues[0]);
-            let zerothToken = previousNumberingToken(firstToken);
-            numberingStack = [zerothToken];
-            
-            if (settings.firstLevel > 1) {
-                previousLevel = settings.firstLevel;
-            }
+            // 重置堆栈，因为编号序列被打断
+            previousLevel = settings.firstLevel - 1;
+            numberingStack = [];
             continue;
         }
 
-        // 2. 处理带锚点的跳过标题
+        // 2. 处理用户指定跳过的特定标题 (如 "Appendix")
         if (settings.skipHeadings.length > 0) {
             if (heading.heading.endsWith(settings.skipHeadings)) {
                 continue;
             }
         }
 
-        // 3. 调整编号堆栈
+        // 3. 调整编号栈
         if (level === previousLevel) {
-            // 同级：弹出，递增，推入
+            // 同级：弹出并递增
             const x = numberingStack.pop();
             if (x !== undefined) {
                 numberingStack.push(nextNumberingToken(x));
             }
         }
         else if (level < previousLevel) {
-            // 升级：弹出(previousLevel - level + 1)次，递增，推入
+            // 升级 (H3 -> H2)：弹出多余层级，递增上一级
             for (let i = previousLevel; i > level; i--) {
                 numberingStack.pop();
             }
@@ -1229,157 +1066,53 @@ const updateHeadingNumbering = (viewInfo, settings) => {
             }
         }
         else if (level > previousLevel) {
-            // 降级：推入(level - previousLevel)次新级别
+            // 降级 (H2 -> H3)：填充中间层级
             for (let i = previousLevel; i < level; i++) {
-                const styleIndex = Math.min(i, headingStyles.length - 1); // i 对应 H(i+1)
+                const styleIndex = Math.min(i, headingStyles.length - 1);
+                // 使用对应层级的样式和起始值初始化新的 Token
                 numberingStack.push(firstNumberingTokenInStyle(headingStyles[styleIndex], headingStartValues[styleIndex]));
             }
         }
 
-        // 4. 更新 previousLevel
+        // 更新前置层级记录
         previousLevel = level;
 
-        // 5. 处理超过 maxLevel 的级别
+        // 超过最大层级不编号
         if (level > settings.maxLevel) {
-            continue; // 不编号
+            continue;
         }
 
-        // 6. 生成并替换编号字符串
+        // 4. 应用更改
         const prefixRange = findHeadingPrefixRange(editor, heading, supportFlags);
-        if (prefixRange === undefined)
-            return;
+        if (prefixRange === undefined) continue;
+
         const headingHashString = makeHeadingHashString(editor, heading);
-        if (headingHashString === undefined)
-            return;
-        
-        // 使用新的多级编号字符串
+        if (headingHashString === undefined) continue;
+
+        // 构建编号字符串
         const prefixString = makeNumberingString(numberingStack, settings.headingSeparators || []);
-        
-        // (旧的 separator 逻辑已移除, H1 前的分隔符在 makeNumberingString 内部处理)
         const separators = settings.headingSeparators || DEFAULT_SETTINGS.headingSeparators;
-        const separator = separators[0] || ''; // H1 前的分隔符 (索引0)
-        
+        const separator = separators[0] || ''; // H1 前缀分隔符
+
+        // 记录更改
         replaceRangeEconomically(editor, changes, prefixRange, headingHashString + prefixString + separator + ' ');
     }
 
-    // 7. 执行所有更改
+    // 批量执行事务
     if (changes.length > 0) {
-        // eslint-disable-next-line no-console
         console.log('Number Headings Plugin: Applying headings numbering changes:', changes.length);
+
         editor.transaction({
             changes: changes
         });
+        return true;
     }
+    return false;
 };
 
 /**
- * 更新文档中由 'contents' 设置指定的目录。
- * @param {object} viewInfo - 活动视图信息 { editor, data }。
- * @param {object} settings - 应用的设置。
- */
-const updateTableOfContents = (viewInfo, settings) => {
-    var _a;
-    if (!viewInfo)
-        return;
-    const headings = (_a = viewInfo.data.headings) !== null && _a !== void 0 ? _a : [];
-    const editor = viewInfo.editor;
-    
-    // 使用插件全局设置中的目录锚点值
-    const contentsAnchor = settings.contents || '';
-    if (!isNonEmptyBlockId(contentsAnchor))
-        return; // 如果未设置锚点，则不执行
-        
-    let tocHeading; // 存储目录锚点所在的标题
-    let tocBuilder = '\n'; // 目录内容的字符串构建器
-    const changes = [];
-
-    // 确定起始级别以正确计算缩进
-    let initialHeadingLevel = 1;
-    if (headings.length > 0) {
-        initialHeadingLevel = headings[0].level;
-    }
-
-    // 1. 遍历所有标题以构建 TOC
-    for (const heading of headings) {
-        // 查找 TOC 锚点标题
-        if (heading.heading.endsWith(contentsAnchor)) {
-            tocHeading = heading;
-        }
-        
-        // (跳过逻辑已注释掉，因为可能导致 TOC 与编号不符)
-        
-        // 创建目录条目
-        const tocEntry = createTocEntry(heading, settings, initialHeadingLevel);
-        tocBuilder += tocEntry + '\n';
-    }
-
-    // 2. 如果找到了 TOC 锚点，则插入/替换目录内容
-    if (tocHeading) {
-        const from = {
-            line: tocHeading.position.start.line + 1, // 从锚点标题的下一行开始
-            ch: 0
-        };
-
-        // 查找现有 TOC 列表的结束位置
-        const startingLine = tocHeading.position.start.line + 1;
-        let endingLine = startingLine;
-        let foundList = false;
-        const lastLineInEditor = editor.lastLine();
-
-        for (;; endingLine++) {
-            const line = editor.getLine(endingLine);
-            if (line === undefined || endingLine > lastLineInEditor) {
-                // 到达文件末尾
-                endingLine = startingLine;
-                break;
-            }
-            const trimmedLineText = line.trimStart();
-            if (foundList) {
-                // 如果已找到列表，则查找列表的结束（非列表项或下一个标题）
-                if (!trimmedLineText.startsWith(TOC_LIST_ITEM_BULLET))
-                    break;
-                if (trimmedLineText.startsWith('#'))
-                    break;
-            }
-            else {
-                if (trimmedLineText.startsWith(TOC_LIST_ITEM_BULLET)) {
-                    foundList = true; // 找到了现有列表的开始
-                }
-                else if (trimmedLineText.startsWith('#')) {
-                    // 没找到列表就遇到了下一个标题
-                    endingLine = startingLine;
-                    break;
-                }
-                else {
-                    continue; // 空行
-                }
-            }
-        }
-
-        if (tocBuilder === '\n') {
-            tocBuilder = ''; // 如果没有标题，则插入空字符串
-        }
-        const to = {
-            line: endingLine,
-            ch: 0
-        };
-        const range = { from, to };
-        replaceRangeEconomically(editor, changes, range, tocBuilder);
-    }
-
-    // 3. 执行更改
-    if (changes.length > 0) {
-        // eslint-disable-next-line no-console
-        console.log('Number Headings Plugin: Applying table of contents changes:', changes.length);
-        editor.transaction({
-            changes: changes
-        });
-    }
-};
-
-/**
- * 移除文档中所有标题的编号。
- * @param {object} viewInfo - 活动视图信息 { editor, data }。
+ * 移除所有标题编号。
+ * 将标题还原为仅剩 hash 符号 (例如 "## 1.1 Title" -> "## Title")。
  */
 const removeHeadingNumbering = (viewInfo) => {
     var _a;
@@ -1388,20 +1121,15 @@ const removeHeadingNumbering = (viewInfo) => {
     const headings = (_a = viewInfo.data.headings) !== null && _a !== void 0 ? _a : [];
     const editor = viewInfo.editor;
     const changes = [];
-    
     for (const heading of headings) {
-        // 查找编号前缀
-        const prefixRange = findHeadingPrefixRange(editor, heading, { alphabet: true, roman: true }); // (flag已弃用)
+        const prefixRange = findHeadingPrefixRange(editor, heading, { alphabet: true, roman: true });
         if (prefixRange === undefined)
             return;
-        // 获取 "##" 部分
         const headingHashString = makeHeadingHashString(editor, heading);
         if (headingHashString === undefined)
             return;
-        // 将前缀替换为 "## " (仅保留哈希和空格)
         replaceRangeEconomically(editor, changes, prefixRange, headingHashString + ' ');
     }
-    
     if (changes.length > 0) {
         editor.transaction({
             changes: changes
@@ -1410,19 +1138,23 @@ const removeHeadingNumbering = (viewInfo) => {
 };
 
 /**
- * 更新文档中所有数学公式块（$$...$$）的编号。
- * @param {object} viewInfo - 活动视图信息 { editor, data }。
- * @param {object} settings - 应用的设置。
+ * 更新公式编号。
+ * 支持 MathJax 块 ($$ ... $$) 的自动编号。
+ * * 模式:
+ * 1. continuous: 全文连续编号 (1, 2, 3...)
+ * 2. heading-based: 基于最近一个标题编号 (1.1-1, 1.1-2...)
+ * * @returns {boolean} 如果发生更改返回 true
  */
 const updateEquationNumbering = ({ editor, data }, settings) => {
     const lineCount = editor.lineCount();
     const changes = [];
-    
-    let equationCounter = 1; // 连续编号计数器
-    let currentHeadingNumber = ''; // 当前标题编号 (用于 'heading-based')
-    const headingFormulaCounters = {}; // 'heading-based' 模式下的计数器
-    
-    // 1. 收集所有 $$ 分隔符的位置
+
+    // 计数器状态
+    let equationCounter = 1;
+    let currentHeadingNumber = '';
+    const headingFormulaCounters = {};
+
+    // 1. 扫描所有 '$$' 位置
     const dollarPositions = [];
     for (let i = 0; i < lineCount; i++) {
         const line = editor.getLine(i);
@@ -1431,38 +1163,38 @@ const updateEquationNumbering = ({ editor, data }, settings) => {
             dollarPositions.push({ line: i, ch: pos });
         }
     }
-    
-    // 2. 遍历 $$ 对 (i 和 i+1)
+
+    // 2. 配对 '$$' 并处理其中的公式
     for (let i = 0; i < dollarPositions.length - 1; i += 2) {
         const start = dollarPositions[i];
         const end = dollarPositions[i + 1];
-        
-        // 3. 获取公式块内容
+
+        // 提取公式文本内容
         let formulaContent = '';
         if (start.line === end.line) {
-            // 单行
             const line = editor.getLine(start.line);
             formulaContent = line.substring(start.ch, end.ch + 2);
         } else {
-            // 跨行
-            formulaContent += editor.getLine(start.line).substring(start.ch) + '\n';
+            const startLine = editor.getLine(start.line);
+            formulaContent += startLine.substring(start.ch) + '\n';
             for (let lineNum = start.line + 1; lineNum < end.line; lineNum++) {
                 formulaContent += editor.getLine(lineNum) + '\n';
             }
-            formulaContent += editor.getLine(end.line).substring(0, end.ch + 2);
+            const endLine = editor.getLine(end.line);
+            formulaContent += endLine.substring(0, end.ch + 2);
         }
-        
-        // 4. 检查是否已有 \tag
+
+        // 检查是否已有 \tag{}
         const tagRegex = /\\tag\{([^}]+)\}/;
         const hasTag = formulaContent.match(tagRegex);
-        
-        // 5. 如果是 'heading-based' 模式, 查找前一个标题
-        currentHeadingNumber = ''; // 重置
+
+        // 3. 如果是基于标题的模式，查找最近的前置标题
+        currentHeadingNumber = '';
         if (settings.equationNumberingMode === 'heading-based') {
             const headings = data.headings || [];
             let currentHeading = null;
-            
-            // 倒序查找公式开始行之前的最后一个标题
+
+            // 倒序查找最近标题
             for (let j = headings.length - 1; j >= 0; j--) {
                 if (headings[j].position.start.line <= start.line) {
                     currentHeading = headings[j];
@@ -1471,107 +1203,100 @@ const updateEquationNumbering = ({ editor, data }, settings) => {
             }
 
             if (currentHeading) {
-                // 找到了标题，提取其编号
                 const headingLine = editor.getLine(currentHeading.position.start.line);
-                // 提取编号的正则表达式 (匹配 # 后的编号部分)
-                const numberExtractRegex = /^\s{0,4}#+\s*([0-9a-zA-Z\u4e00-\u9fa5\u2460-\u2473&零⓪].*?)\s/;
+                // 提取标题中的编号部分
+                const numberExtractRegex = /^\s{0,4}#+\s*([0-9a-zA-Z\u4e00-\u9fa5\u2460-\u2473&⓪].*?)(\s|$)/;
                 const headingMatch = headingLine.match(numberExtractRegex);
-                
+
                 if (headingMatch && headingMatch[1]) {
-                    currentHeadingNumber = headingMatch[1].trim(); // e.g., "1.1"
-                    // 移除末尾的分隔符
-                    if (currentHeadingNumber.endsWith('.') || currentHeadingNumber.endsWith(':') || currentHeadingNumber.endsWith('—') || currentHeadingNumber.endsWith('-')) {
-                        currentHeadingNumber = currentHeadingNumber.substring(0, currentHeadingNumber.length -1);
+                    currentHeadingNumber = headingMatch[1].trim();
+                    // 去除末尾分隔符
+                    if (['.', ':', '—', '-'].some(c => currentHeadingNumber.endsWith(c))) {
+                        currentHeadingNumber = currentHeadingNumber.slice(0, -1);
                     }
-                    
-                    // 初始化该标题的公式计数器
+
                     if (!headingFormulaCounters[currentHeadingNumber]) {
                         headingFormulaCounters[currentHeadingNumber] = 1;
                     }
                 }
-                // 如果标题存在但没有编号，currentHeadingNumber 保持为空，将回退到连续编号
             }
         }
-        
-        // 6. 确定新的编号
+
+        // 4. 生成新编号
         let equationNumber;
         if (settings.equationNumberingMode === 'heading-based' && currentHeadingNumber) {
-            // 基于标题编号
             equationNumber = `${currentHeadingNumber}-${headingFormulaCounters[currentHeadingNumber]}`;
             headingFormulaCounters[currentHeadingNumber]++;
         } else {
-            // 连续编号
             equationNumber = `${equationCounter}`;
             equationCounter++;
         }
-            
-        // 7. 应用更改
+
+        // 5. 应用编号 (插入或替换)
         if (!hasTag) {
-            // --- 新增编号 ---
-            // 插入到结束 $$ 标记之前
+            // 插入模式：在末尾 $$ 前插入 \tag{...}
             const endLine = editor.getLine(end.line);
             const beforeDollars = endLine.substring(0, end.ch);
             const afterDollars = endLine.substring(end.ch);
-            const newLine = beforeDollars + ` \\tag{${equationNumber}}` + afterDollars; // 添加空格
-            
+            const newLine = beforeDollars + ` \\tag{${equationNumber}}` + afterDollars;
+
             changes.push({
                 from: { line: end.line, ch: 0 },
                 to: { line: end.line, ch: endLine.length },
                 text: newLine
             });
-            
+
         } else {
-            // --- 替换现有编号 ---
+            // 替换模式：更新现有的 \tag{...}
             const updatedContent = formulaContent.replace(tagRegex, `\\tag{${equationNumber}}`);
-            
-            // 替换整个公式块（因为多行块的 \tag 可能不在最后一行）
-            if (start.line === end.line) {
-                // 单行
-                const line = editor.getLine(start.line);
-                const beforeFormula = line.substring(0, start.ch);
-                const afterFormula = line.substring(end.ch + 2);
-                changes.push({
-                    from: { line: start.line, ch: 0 },
-                    to: { line: start.line, ch: line.length },
-                    text: beforeFormula + updatedContent + afterFormula
-                });
-            } else {
-                // 跨行
-                changes.push({
-                    from: { line: start.line, ch: start.ch },
-                    to: { line: end.line, ch: end.ch + 2 },
-                    text: updatedContent
-                });
+
+            if (updatedContent !== formulaContent) {
+                if (start.line === end.line) {
+                    const line = editor.getLine(start.line);
+                    const beforeFormula = line.substring(0, start.ch);
+                    const afterFormula = line.substring(end.ch + 2);
+
+                    changes.push({
+                        from: { line: start.line, ch: 0 },
+                        to: { line: start.line, ch: line.length },
+                        text: beforeFormula + updatedContent + afterFormula
+                    });
+                } else {
+                    changes.push({
+                        from: { line: start.line, ch: start.ch },
+                        to: { line: end.line, ch: end.ch + 2 },
+                        text: updatedContent
+                    });
+                }
             }
         }
     }
-    
-    // 8. 执行所有更改
+
     if (changes.length > 0) {
-        // eslint-disable-next-line no-console
         console.log('Number Headings Plugin: Applying equation numbering changes:', changes.length);
+
         editor.transaction({
             changes: changes
         });
+        return true;
     }
-}
+    return false;
+};
 
 /**
- * 移除文档中所有公式块的编号（\tag{...}）。
- * @param {object} viewInfo - 活动视图信息 { editor, data }。
+ * 移除公式编号。
+ * 安全地删除所有公式块中的 \tag{...} 标记。
  */
 const removeEquationNumbering = (viewInfo) => {
     if (!viewInfo)
         return;
-    
+
     const editor = viewInfo.editor;
     const changes = [];
     const lineCount = editor.lineCount();
-    
-    // 匹配 \tag{...} 及其前面的空白
-    const tagRegex = /\s*\\tag\{[^}]*\}/; 
+    const tagRegex = /\s*\\tag\{[^}]*\}/;
 
-    // 1. 收集所有 $$ 的位置
+    // 1. 定位所有公式块
     const dollarPositions = [];
     for (let i = 0; i < lineCount; i++) {
         const line = editor.getLine(i);
@@ -1581,55 +1306,42 @@ const removeEquationNumbering = (viewInfo) => {
         }
     }
 
-    // 2. 倒序遍历 $$ 块，防止更改破坏后续位置
+    // 2. 倒序遍历，防止删除文本导致后续行号/索引失效
     for (let i = dollarPositions.length - 2; i >= 0; i -= 2) {
         const start = dollarPositions[i];
         const end = dollarPositions[i + 1];
-        
-        // 3. 在当前块的行内（从上到下）查找 \tag
+
+        // 3. 在公式块内部查找 tag 并删除
         for (let j = start.line; j <= end.line; j++) {
             const line = editor.getLine(j);
-            
+
             let searchStartCh = 0;
             let searchEndCh = line.length;
 
-            // 确定搜索范围（在 $$ 内部）
-            if (j === start.line) {
-                searchStartCh = start.ch + 2; // $$ 之后
-            }
-            if (j === end.line) {
-                searchEndCh = end.ch; // $$ 之前
-            }
-            
-            // 处理单行 $$...$$
+            // 确定查找范围 (排除 $$)
+            if (j === start.line) searchStartCh = start.ch + 2;
+            if (j === end.line) searchEndCh = end.ch;
             if (j === start.line && j === end.line) {
-                 searchStartCh = start.ch + 2;
-                 searchEndCh = end.ch;
+                searchStartCh = start.ch + 2;
+                searchEndCh = end.ch;
             }
-            
-            if (searchStartCh >= searchEndCh) {
-                 continue; // 范围无效
-            }
+
+            if (searchStartCh >= searchEndCh) continue;
 
             const contentToSearch = line.substring(searchStartCh, searchEndCh);
 
             if (tagRegex.test(contentToSearch)) {
-                // 找到 \tag，将其替换为空字符串
                 const newContent = contentToSearch.replace(tagRegex, '');
-                
                 changes.push({
                     from: { line: j, ch: searchStartCh },
                     to: { line: j, ch: searchEndCh },
                     text: newContent
                 });
-
-                // 找到并移除后，跳出内部循环，处理下一个 $$ 块
-                break; 
+                break; // 假设每个公式只有一个 tag
             }
         }
     }
-    
-    // 4. 执行所有更改
+
     if (changes.length > 0) {
         editor.transaction({
             changes: changes
@@ -1637,7 +1349,9 @@ const removeEquationNumbering = (viewInfo) => {
     }
 };
 
-// --- 插件全局设置页 ---
+// ====================================================================================
+// 插件设置面板 (Obsidian 设置页)
+// ====================================================================================
 
 class NumberHeadingsPluginSettingTab extends obsidian.PluginSettingTab {
     constructor(app, plugin) {
@@ -1650,34 +1364,34 @@ class NumberHeadingsPluginSettingTab extends obsidian.PluginSettingTab {
         containerEl.createEl('h2', { text: 'Number Headings - Settings' });
         containerEl.createEl('div', { text: '这些设置将用作编号控制面板的默认值。要为特定文档设置编号，请使用编号控制面板。' });
         containerEl.createEl('br', {});
-        
-        // 默认第一级别
+
+        // 设置项：第一级别
         new obsidian.Setting(containerEl)
             .setName('第一标题级别')
             .setDesc('编号起始的标题级别')
             .addSlider(slider => slider
-            .setLimits(1, 6, 1)
-            .setValue(this.plugin.settings.firstLevel)
-            .setDynamicTooltip()
-            .onChange((value) => __awaiter(this, void 0, void 0, function* () {
-            this.plugin.settings.firstLevel = value;
-            yield this.plugin.saveSettings();
-        })));
-        
-        // 默认最大级别
+                .setLimits(1, 6, 1)
+                .setValue(this.plugin.settings.firstLevel)
+                .setDynamicTooltip()
+                .onChange((value) => __awaiter(this, void 0, void 0, function* () {
+                    this.plugin.settings.firstLevel = value;
+                    yield this.plugin.saveSettings();
+                })));
+
+        // 设置项：最大级别
         new obsidian.Setting(containerEl)
             .setName('最大标题级别')
             .setDesc('编号的最大标题级别')
             .addSlider(slider => slider
-            .setLimits(1, 6, 1)
-            .setValue(this.plugin.settings.maxLevel)
-            .setDynamicTooltip()
-            .onChange((value) => __awaiter(this, void 0, void 0, function* () {
-            this.plugin.settings.maxLevel = value;
-            yield this.plugin.saveSettings();
-        })));
-        
-        // 默认各级样式
+                .setLimits(1, 6, 1)
+                .setValue(this.plugin.settings.maxLevel)
+                .setDynamicTooltip()
+                .onChange((value) => __awaiter(this, void 0, void 0, function* () {
+                    this.plugin.settings.maxLevel = value;
+                    yield this.plugin.saveSettings();
+                })));
+
+        // 设置项：标题样式 (动态生成下拉框)
         new obsidian.Setting(containerEl)
             .setName('各级标题类型')
             .setDesc('定义1-6级标题的编号类型')
@@ -1703,7 +1417,7 @@ class NumberHeadingsPluginSettingTab extends obsidian.PluginSettingTab {
                 }
             });
 
-        // 默认各级分隔符
+        // 设置项：分隔符 (动态生成下拉框)
         new obsidian.Setting(containerEl)
             .setName('各级分隔符样式')
             .setDesc('定义 H1-H2 ... H5-H6 之间的5个分隔符')
@@ -1719,7 +1433,6 @@ class NumberHeadingsPluginSettingTab extends obsidian.PluginSettingTab {
                 container.style.display = 'flex';
                 container.style.flexWrap = 'wrap';
 
-                // 索引 1 到 5
                 for (let i = 1; i <= 5; i++) {
                     const select = container.createEl('select');
                     select.style.marginRight = '5px';
@@ -1734,8 +1447,8 @@ class NumberHeadingsPluginSettingTab extends obsidian.PluginSettingTab {
                     });
                 }
             });
-        
-        // 默认各级起始值
+
+        // 设置项：起始编号
         new obsidian.Setting(containerEl)
             .setName('各级起始编号')
             .setDesc('定义1-6级标题的起始编号值')
@@ -1749,78 +1462,66 @@ class NumberHeadingsPluginSettingTab extends obsidian.PluginSettingTab {
                     const input = container.createEl('input', { type: 'text', attr: { style: 'width: 40px; margin-right: 5px; margin-bottom: 5px;' } });
                     input.value = this.plugin.settings.headingStartValues[i] || '1';
                     input.onchange = (e) => __awaiter(this, void 0, void 0, function* () {
-                        // 仅保存第一个字符
                         this.plugin.settings.headingStartValues[i] = e.target.value.charAt(0) || '0';
                         yield this.plugin.saveSettings();
                     });
                 }
             });
-        
-        // 默认公式编号模式
+
+        // 设置项：公式编号模式
         new obsidian.Setting(containerEl)
             .setName('默认公式编号模式')
             .setDesc('定义公式编号方式。连续编号：在整个文档中递增编号。基于标题编号：基于前一个标题编号（例如，1.1, 1.2）。')
             .addDropdown(dropdown => dropdown
-            .addOption('continuous', '连续编号')
-            .addOption('heading-based', '基于标题编号')
-            .setValue(this.plugin.settings.equationNumberingMode)
-            .onChange((value) => __awaiter(this, void 0, void 0, function* () {
-            this.plugin.settings.equationNumberingMode = value;
-            yield this.plugin.saveSettings();
-        })));
-        
-        // 默认刷新间隔
+                .addOption('continuous', '连续编号')
+                .addOption('heading-based', '基于标题编号')
+                .setValue(this.plugin.settings.equationNumberingMode)
+                .onChange((value) => __awaiter(this, void 0, void 0, function* () {
+                    this.plugin.settings.equationNumberingMode = value;
+                    yield this.plugin.saveSettings();
+                })));
+
+        // 设置项：刷新间隔
         new obsidian.Setting(containerEl)
-            .setName('自动刷新间隔（秒）')
-            .setDesc('自动编号的刷新间隔时间（秒）')
+            .setName('自动刷新间隔（毫秒）')
+            .setDesc('自动编号的刷新间隔时间（毫秒，例如 500 表示 0.5 秒）')
             .addText(text => text
-            .setValue(String(this.plugin.settings.refreshInterval))
-            .onChange((value) => __awaiter(this, void 0, void 0, function* () {
-            const interval = parseInt(value);
-            if (!isNaN(interval) && interval > 0) {
-                this.plugin.settings.refreshInterval = interval;
-                yield this.plugin.saveSettings();
-            }
-        })));
-        
-        // 默认目录锚点
-        new obsidian.Setting(containerEl)
-            .setName('目录锚点')
-            .setDesc('插入目录的锚点标识符，如^toc')
-            .addText(text => text
-            .setValue(this.plugin.settings.contents)
-            .onChange((value) => __awaiter(this, void 0, void 0, function* () {
-            this.plugin.settings.contents = value;
-            yield this.plugin.saveSettings();
-        })));
+                .setValue(String(this.plugin.settings.refreshInterval))
+                .onChange((value) => __awaiter(this, void 0, void 0, function* () {
+                    const interval = parseInt(value);
+                    if (!isNaN(interval) && interval > 0) {
+                        this.plugin.settings.refreshInterval = interval;
+                        yield this.plugin.saveSettings();
+                    }
+                })));
     }
 }
 
-// --- 插件主类 ---
+// ====================================================================================
+// 插件主类
+// ====================================================================================
 
 class NumberHeadingsPlugin extends obsidian.Plugin {
     onload() {
         return __awaiter(this, void 0, void 0, function* () {
-            // eslint-disable-next-line no-console
             console.info('Loading Number Headings Plugin, version ' + this.manifest.version);
             yield this.loadSettings();
 
-            // 注册“编号控制”命令
+            // 自动更新定时器引用
+            this.autoUpdateTimeout = null;
+
+            // 注册命令：打开编号控制面板
             this.addCommand({
                 id: 'number-control',
                 name: '编号控制',
                 checkCallback: (checking) => {
                     if (checking)
-                        return isViewActive(this.app); // 仅在 Markdown 视图激活
-                    
+                        return isViewActive(this.app);
                     const viewInfo = getViewInfo(this.app);
                     if (viewInfo) {
-                        // 获取当前文档的设置（合并 Front Matter 和全局设置）
                         const settings = getFrontMatterSettingsOrAlternative(viewInfo.data, this.settings);
                         if (settings.off)
-                            return false; // 如果文档禁用则不显示
-                        
-                        // 显示控制面板
+                            return false;
                         showNumberingControlPanel(this.app, settings);
                     }
                     return false;
@@ -1830,52 +1531,139 @@ class NumberHeadingsPlugin extends obsidian.Plugin {
             // 注册设置页
             this.addSettingTab(new NumberHeadingsPluginSettingTab(this.app, this));
 
-            // 注册自动编号定时器
-            this.registerInterval(window.setInterval(() => {
-                const viewInfo = getViewInfo(this.app);
-                if (viewInfo) {
-                    const settings = getFrontMatterSettingsOrAlternative(viewInfo.data, this.settings);
-                    if (settings.off)
-                        return;
-                    
-                    // 检查是否开启了任一自动编号
-                    if (settings.auto || settings.autoNumberFormulas) {
-                        if (settings.auto) {
-                            updateHeadingNumbering(viewInfo, settings);
-                        }
-                        if (settings.autoNumberFormulas) {
-                            updateEquationNumbering(viewInfo, settings);
-                        }
-                        // 延迟更新目录
-                        setTimeout(() => {
-                            const postNumberingViewInfo = getViewInfo(this.app);
-                            updateTableOfContents(postNumberingViewInfo, settings);
-                        }, 3000); // 3秒延迟
-                        
-                        // eslint-disable-next-line no-console
-                        console.log('Number Headings Plugin: Automatically numbered document');
-                    }
-                }
-            }, this.settings.refreshInterval * 1000)); // 使用设置中的间隔
+            // 注册焦点事件以驱动自动更新
+            this.registerEditorFocusEvents();
         });
     }
 
-    // 加载插件数据（全局设置）
+    /**
+     * 注册编辑器焦点事件监听器。
+     * 逻辑：当窗口失焦时启动计时器，超时后执行自动更新；如果窗口重新获得焦点，则取消更新。
+     */
+    registerEditorFocusEvents() {
+        // 1. DOM 失焦 (Blur) -> 开启计时器
+        this.registerDomEvent(window, 'blur', () => {
+            this.handleBlur();
+        });
+
+        // 2. DOM 聚焦 (Focus) -> 打断计时器
+        this.registerDomEvent(window, 'focus', () => {
+            this.handleFocus();
+        });
+    }
+
+    /**
+     * 处理失焦事件。
+     * 启动延迟更新计时器。
+     */
+    handleBlur() {
+        this.clearAutoUpdateTimer();
+
+        // 转换秒为毫秒
+        const delay = (this.settings.refreshInterval || 5000);
+        console.log(`Number Headings Plugin: Blurred. Timer started for ${delay}ms.`);
+
+        this.autoUpdateTimeout = window.setTimeout(() => {
+            this.performAutoUpdate();
+        }, delay);
+    }
+
+    /**
+     * 处理聚焦事件。
+     * 如果用户在倒计时结束前回来，则取消更新，防止干扰用户。
+     */
+    handleFocus() {
+        if (this.autoUpdateTimeout) {
+            console.log('Number Headings Plugin: Focused. Timer cancelled.');
+            this.clearAutoUpdateTimer();
+        }
+    }
+
+    clearAutoUpdateTimer() {
+        if (this.autoUpdateTimeout) {
+            clearTimeout(this.autoUpdateTimeout);
+            this.autoUpdateTimeout = null;
+        }
+    }
+
+    /**
+     * 执行自动更新逻辑。
+     * 包含快照光标位置、执行更新、并在检测到变更后恢复光标的完整流程。
+     */
+    performAutoUpdate() {
+        const viewInfo = getViewInfo(this.app);
+        if (!viewInfo || !viewInfo.editor) return;
+
+        const settings = getFrontMatterSettingsOrAlternative(viewInfo.data, this.settings);
+
+        // 检查是否启用了自动功能
+        if (settings.off || (!settings.auto && !settings.autoNumberFormulas)) {
+            return;
+        }
+
+        const editor = viewInfo.editor;
+
+        // 步骤 1: 记录更新前状态 (光标和滚动位置)
+        const cursorBefore = editor.getCursor();
+        const scrollBefore = editor.getScrollInfo();
+
+        console.log('Number Headings Plugin: executing auto-update check...');
+
+        let isChanged = false;
+
+        try {
+            // A. 尝试更新标题
+            if (settings.auto) {
+                if (updateHeadingNumbering(viewInfo, settings)) {
+                    isChanged = true;
+                }
+            }
+
+            // B. 尝试更新公式
+            if (settings.autoNumberFormulas) {
+                if (updateEquationNumbering(viewInfo, settings)) {
+                    isChanged = true;
+                }
+            }
+
+        } catch (e) {
+            console.error("Number Headings Plugin: Error during update logic", e);
+            this.autoUpdateTimeout = null;
+            return;
+        }
+
+        // 步骤 2: 如果发生变更，恢复用户视角
+        if (isChanged) {
+            console.log('Number Headings Plugin: Changes detected. Restoring cursor and scroll position.');
+
+            if (typeof restoreCursor === 'function') {
+                restoreCursor(editor, cursorBefore);
+            } else {
+                editor.setCursor(cursorBefore);
+            }
+
+            editor.scrollTo(scrollBefore.left, scrollBefore.top);
+        } else {
+            console.log('Number Headings Plugin: No changes needed.');
+        }
+
+        this.autoUpdateTimeout = null;
+    }
+
     loadSettings() {
         return __awaiter(this, void 0, void 0, function* () {
             this.settings = Object.assign({}, DEFAULT_SETTINGS, yield this.loadData());
         });
     }
-
-    // 保存插件数据（全局设置）
     saveSettings() {
         return __awaiter(this, void 0, void 0, function* () {
             yield this.saveData(this.settings);
         });
     }
+
+    onunload() {
+        this.clearAutoUpdateTimer();
+    }
 }
 
 module.exports = NumberHeadingsPlugin;
-
-
-/* nosourcemap */
