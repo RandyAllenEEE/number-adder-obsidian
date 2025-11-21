@@ -1,107 +1,79 @@
-# Obsidian Number Adder Plugin
+# Number Adder for Obsidian
 
-This is a plugin designed for [Obsidian](https://obsidian.md) that automatically adds hierarchical numbering to Markdown headings and supports numbering for math formula blocks (`$$...$$`).
+**Number Adder** 是一个为 Obsidian 笔记提供自动编号功能的插件。它能够根据文档结构，自动为**标题 (Headings)** 和 **数学公式 (Math Equations)** 添加有序编号。
 
-The core code and concept are derived from the [number-headings](https://github.com/onlyafly/number-headings-obsidian) plugin. Thank you!
+> 本项目基于 **[Number Headings Obsidian](https://github.com/onlyafly/number-headings-obsidian)** 开发。
+> 核心逻辑归功于原作者 **onlyafly**。本项目在此基础上进行了定制化修改（公式编号、中文支持），旨在满足特定的文档排版需求。
+> 
+> This project is a fork/enhanced version based on **[Number Headings Obsidian](https://github.com/onlyafly/number-headings-obsidian)**. All credits for the core logic go to **onlyafly**. This version includes customizations such as Chinese numbering support and millisecond-level refresh control.
 
-This plugin is powerful and highly configurable. All settings apply individually to each file and are stored in the file's Front Matter.
+## ✨ 主要功能 (Features)
 
-## Core Features
+1.  **智能标题编号**：
+    * 支持自动为 H1-H6 标题添加层级编号（如 `1.1`, `1.1.1`）。
+    * **多样式支持**：支持阿拉伯数字 (`1`)、字母 (`A`, `a`)、**中文数字 (`一`)** 以及 **带圈数字 (`①`)**。
 
-* **Multi-level Heading Numbering**:
-    * Automatically adds hierarchical numbering to H1 through H6 headings (e.g., `1.`, `1.1.`, `1.1.1.`).
-    * Provides fine-grained control via a unified "Numbering Control" panel.
-* **Flexible Style Customization**:
-    * **Style by Level**: Allows setting the numbering style *individually* for each of the 1–6 heading levels.
-    * **Supported Styles**:
-        * `1`: Arabic numerals (1, 2, 3...)
-        * `a`: Lowercase letters (a, b, c...)
-        * `A`: Uppercase letters (A, B, C...)
-        * `一`: Chinese numerals (一, 二, 三...)
-        * `①`: Circled numbers (①, ②, ③...)
-    * **Separator by Level**: Customize the separator between levels (e.g., between H1 and H2), such as `.`, `-`, `:`, etc.
-    * **Start Value by Level**: Set a starting number for *each* heading level, including starting from `0` (e.g., `零` or `⓪`).
-* **Advanced Formula Numbering**:
-    * Automatically adds `\tag{...}` numbering to `$$...$$` math blocks.
-    * Supports two modes:
-        1.  **Continuous**: Numbers increment throughout the document as `(1)`, `(2)`, `(3)`...
-        2.  **Heading-based**: Generates numbers based on the previous heading’s number, e.g., `(1.1-1)`, `(1.1-2)`, `(2.1-1)`...
-* **Unified Control Panel**:
-    * Opens a modal via the `Number Control` command, providing access to all features.
-    * **Manual Numbering**: Immediately number headings, formulas, or both, or remove all numbering.
-    * **Auto Numbering Settings**: Configure all styles, ranges, start values, and whether to auto-number headings or formulas.
-* **Front Matter-based Configuration**:
-    * All settings apply to *individual files* and are saved in a compact format under the Front Matter keys `number headings` and `number formulas`.
-    * This allows each document to have its own independent numbering scheme without changing global settings.
-* **Automatic Table of Contents (TOC) Generation**:
-    * (Retained feature) Supports adding an anchor (e.g., `^toc`) in headings, and the plugin will automatically generate a table of contents linking to all headings under that heading.
+2.  **公式自动编号**：
+    * 自动扫描 MathJax 块 (`$$...$$`) 并添加 `\tag{}`。
+    * **连续模式**：全文公式统一计数（如 `(1)`, `(2)`）。
+    * **章节模式**：基于最近标题的层级编号（如 `(1.1-1)`, `(1.1-2)`）。
 
-## How to Use
+3.  **非侵入式自动更新**：
+    * 采用 `blur`（失焦）触发机制：当您暂停写作切换窗口或点击外部时，插件才会更新编号，避免打断写作思路或造成光标跳动。
+    * 支持自定义**毫秒级**刷新延迟。
 
-1. Open the Command Palette (Cmd/Ctrl + P).
-2. Search for and run the **"Number Control"** command.
-3. **In the "Manual Numbering" tab**:
-    * Click **"Number Headings"** or **"Number Formulas"** to apply numbering immediately.
-    * Click **"Remove All Numbering"** to clear all numbering in the current document.
-4. **In the "Auto Numbering Settings" tab**:
-    * Turn the **"Auto Number Headings"** or **"Auto Number Formulas"** switches on or off as needed.
-    * Select your **"Formula Numbering Mode"** (Continuous or Heading-based).
-    * Set the **"Numbering Range"** you wish to apply (e.g., from H1 to H6).
-    * **Configure Styles**: Select the "Type", "Separator", and "Start Value" for each of the 1–6 heading levels.
-    * Click **"Save Auto Numbering Settings and Apply Once"**.
-5. Your settings will be saved to the file's Front Matter and applied once immediately. If auto-numbering is enabled, the plugin will automatically update based on your set refresh interval.
+4.  **高度可配置**：
+    * 通过命令面板或设置页通过可视化界面调整配置。
+    * 配置自动保存到文档的 FrontMatter (YAML) 中，确保每篇文档的独立性。
 
-## Advanced Front Matter Configuration
+## 📥 安装 (Installation)
 
-All settings are stored in a compact format under the `number headings` and `number formulas` keys.
+由于本项目是手动构建版本，请按照以下步骤安装：
 
-### `number headings`
+1.  进入您的 Obsidian 仓库目录：`.obsidian/plugins/`。
+2.  新建文件夹 `number-adder-obsidian`。
+3.  将 `main.js`, `manifest.json`, `styles.css` 放入该文件夹。
+4.  重启 Obsidian，在“第三方插件”设置中启用 **Number Adder**。
 
-Format: `[auto], [range], [styles], [separators], [start-values], [options]`
+## 🚀 使用指南 (Usage)
 
-* **`auto`**: (Optional) If present, automatically numbers headings.
-* **`range`**: Level range, e.g., `1-6`.
-* **`styles`**: A 6-character string corresponding to the style for H1–H6. e.g., `1aA一①1`.
-* **`separators`**: A 5-character string for separators between H1-H2, H2-H3...H5-H6. e.g., `-:.—`.
-* **`start-values`**: A 6-character string for the starting value of H1–H6. e.g., `011111` (H1 starts from 0, others from 1).
-* **`options`**: (Optional)
-    * `contents ^toc`: Sets a table of contents anchor.
-    * `skip ^skip`: Skips headings containing the `^skip` anchor.
+### 1. 基础使用
+按下 `Cmd/Ctrl + P` 打开命令面板，输入 **"Numbering Control"** 并回车，即可打开**编号控制面板**。
 
-**Example:**
-`number headings: auto, 1-6, 1aA一①1, -:.—, 011111, contents ^toc`
+在面板中，您可以：
+* **手动编号**：点击按钮立即为当前文档的标题或公式生成编号。
+* **移除编号**：一键清除所有由插件生成的编号。
+* **自动编号设置**：开启/关闭自动编号，并调整样式。
 
-### `number formulas`
+### 2. 自动编号设置 (Settings)
+您可以在插件设置页或控制面板中调整以下参数：
 
-Format: `[auto], [mode]`
+* **编号范围**：设置起始层级（如从 H2 开始）和最大层级。
+* **样式自定义**：
+    * `1` : 阿拉伯数字 (1, 2, 3...)
+    * `A` / `a` : 英文字母 (A, B, C...)
+    * `一` : 中文数字 (一, 二, 三...) *[本版特色]*
+    * `①` : 带圈数字 (①, ②, ③...) *[本版特色]*
+* **公式编号模式**：
+    * `Continuous`: 连续编号。
+    * `Heading-based`: 基于章节（如 3.2 节下的公式为 3.2-1）。
 
-* **`auto`**: (Optional) If present, automatically numbers formulas.
-* **`mode`**: `continuous` or `heading-based`.
+### 3. FrontMatter 配置
+插件会将配置以紧凑格式保存在文档顶部的 YAML 区域，例如：
 
-**Example:**
-`number formulas: auto, heading-based`
-
+```yaml
 ---
-
-## Changelog
-
-### 2.0.0 
-
-* **Major Change:** Introduced `headingStyles`, `headingSeparators`, and `headingStartValues` arrays, allowing *individual* configuration of style, separator, and start value for each of the 1–6 heading levels.
-* **New Feature:** Added support for **Chinese numerals** (`一, 二, 三`) and **circled numerals** (`①, ②, ③`).
-* **New Feature:** Added **"Heading-based"** (`heading-based`) mode for formula numbering (e.g., `1.1-1`, `1.1-2`).
-* **New Feature:** Introduced a unified **"Numbering Control"** modal that integrates all manual and auto settings.
-* **Major Change (Removed):** Removed support for Roman numerals (`I`, `i`) to simplify maintenance and core logic.
-* **Major Change (Removed):** Removed the old, single `start-at` setting. More powerful per-level control is now provided by the `headingStartValues` array.
-* **Major Change (Removed):** Removed all old Front Matter keys (e.g., `styleLevel1`, `styleLevelOther`, `separator`, `auto`, etc.). All settings are now uniformly stored in the compact strings under the `number headings` and `number formulas` keys.
-
+number headings: auto, 1-6, 111111, ....., 111111
+number formulas: auto, continuous
 ---
+````
 
-### Legacy Changelog (1.12.0 and earlier)
+*请勿手动修改这些复杂的字符串，建议通过插件提供的 UI 面板进行调整。*
 
-* 1.12.0: (Removed) Added support for Roman numerals.
-* 1.11.0: (Removed) Added 'start-at' setting.
-* 1.10.1: Fixed a loop error caused by separators.
-* 1.8.0: Added automatic TOC rendering and 'first-level' setting.
-* 1.7.0: (Removed) Added support for custom separators (now upgraded to per-level definition).
-* 1.6.0: (Removed) Simplified Front Matter settings to a single key (now updated to new compact format).
+## ⚙️ 开发者说明 (Development)
+
+本插件使用 TypeScript 编写（源码编译为 JS）。
+
+  * **核心逻辑**：基于栈（Stack）的层级追踪算法。
+  * **性能优化**：使用了 `replaceRangeEconomically` 和 `editor.transaction`，确保只在内容发生实际变化时写入，并合并撤销（Undo）历史。
+  * **中文支持**：在 `main.js` 中内置了中文数字映射表 (`chineseNumbers`)。
