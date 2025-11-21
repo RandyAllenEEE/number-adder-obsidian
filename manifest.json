@@ -1,10 +1,10 @@
 {
-	"id": "number-headings-obsidian",
-	"name": "Number Headings",
+	"id": "number-adder-obsidian",
+	"name": "Number Adder",
 	"version": "1.16.0",
 	"minAppVersion": "1.4.0",
-	"description": "Automatically number or re-number headings in an Obsidian document",
-	"author": "Kevin Albrecht (onlyafly@gmail.com)",
-	"authorUrl": "https://www.kevinalbrecht.com",
-	"isDesktopOnly": false
+	"description": "Automatically number or re-number headings and formulas in an Obsidian document",
+	"author": "Randy Allen",
+	"authorUrl": "https://github.com/RandyAllenEEE",
+	"isDesktopOnly": true
 }
