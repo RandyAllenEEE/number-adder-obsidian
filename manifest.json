@@ -1,10 +1,11 @@
 {
 	"id": "number-adder-obsidian",
 	"name": "Number Adder",
-	"version": "1.16.0",
-	"minAppVersion": "1.4.0",
+	"version": "2.0.0",
+	"minAppVersion": "2.0.0",
 	"description": "Automatically number or re-number headings and formulas in an Obsidian document",
 	"author": "Randy Allen",
 	"authorUrl": "https://github.com/RandyAllenEEE",
 	"isDesktopOnly": true
 }
+
