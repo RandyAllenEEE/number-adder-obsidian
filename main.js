@@ -151,6 +151,47 @@ function isValidArabicNumberingValueString(s) {
 }
 
 /**
+ * 获取文档中所有代码块的行号范围。
+ * 基于 Obsidian 的 CachedMetadata。
+ * @param {CachedMetadata} data 
+ * @returns {Array<{start: number, end: number}>}
+ */
+function getCodeBlockRanges(data) {
+    if (!data || !data.sections) return [];
+    return data.sections
+        .filter(section => section.type === 'code')
+        .map(section => ({
+            start: section.position.start.line,
+            end: section.position.end.line
+        }));
+}
+
+/**
+ * 检查指定行是否应被忽略（位于代码块内或表格行中）。
+ * @param {number} lineNum 行号
+ * @param {string} lineText 行文本
+ * @param {Array<{start: number, end: number}>} codeRanges 代码块范围列表
+ * @returns {boolean}
+ */
+function isLineIgnored(lineNum, lineText, codeRanges) {
+    // 1. 检查是否在代码块范围内
+    for (const range of codeRanges) {
+        if (lineNum >= range.start && lineNum <= range.end) {
+            return true;
+        }
+    }
+
+    // 2. 检查是否为表格行 (以 | 开头，允许前导空格)
+    // 注意：这将忽略表格内的所有内容，包括公式
+    const tableRegex = /^\s*\|/;
+    if (tableRegex.test(lineText)) {
+        return true;
+    }
+
+    return false;
+}
+
+/**
  * 根据样式获取“零值”Token。
  * 用于计算编号的前一个状态 (例如 1 的前一个是 0, A 的前一个是 @/Z)。
  * * @param {string} style 编号样式 ('1', 'A', 'a', etc.)
@@ -1067,6 +1108,8 @@ const updateHeadingNumbering = (viewInfo, settings) => {
     const headings = (_a = viewInfo.data.headings) !== null && _a !== void 0 ? _a : [];
     const editor = viewInfo.editor;
 
+    const codeRanges = getCodeBlockRanges(viewInfo.data);
+
     const supportFlags = { alphabet: true, roman: true };
 
     // 获取样式和起始值配置
@@ -1080,6 +1123,13 @@ const updateHeadingNumbering = (viewInfo, settings) => {
     const changes = [];
     for (const heading of headings) {
         const level = heading.level;
+        const lineNum = heading.position.start.line; // 获取行号
+        const lineText = editor.getLine(lineNum);
+
+        // 忽略代码块或表格中的标题
+        if (isLineIgnored(lineNum, lineText, codeRanges)) {
+            continue;
+        }
 
         // 1. 处理跳过的层级 (settings.firstLevel 之前的)
         if (settings.firstLevel > level) {
@@ -1198,6 +1248,9 @@ const updateEquationNumbering = ({ editor, data }, settings) => {
     const lineCount = editor.lineCount();
     const changes = [];
 
+    // 获取代码块范围
+    const codeRanges = getCodeBlockRanges(data);
+
     // 计数器状态
     let equationCounter = 1;
     let currentHeadingNumber = '';
@@ -1207,6 +1260,12 @@ const updateEquationNumbering = ({ editor, data }, settings) => {
     const dollarPositions = [];
     for (let i = 0; i < lineCount; i++) {
         const line = editor.getLine(i);
+        
+        // 检查该行是否应被忽略
+        if (isLineIgnored(i, line, codeRanges)) {
+            continue; 
+        }
+
         let pos = -1;
         while ((pos = line.indexOf('$$', pos + 1)) !== -1) {
             dollarPositions.push({ line: i, ch: pos });
