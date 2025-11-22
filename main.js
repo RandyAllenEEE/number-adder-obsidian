@@ -411,7 +411,8 @@ const DEFAULT_SETTINGS = {
     refreshInterval: 1000,         // 自动更新检测间隔 (毫秒)
     headingStyles: ['1', 'a', 'A', '一', '①', '1'], // 1-6级标题的具体样式
     headingSeparators: ['', '-', ':', '.', '—', '-'], // 1-6级的分隔符 (索引0为H1前缀)
-    headingStartValues: ['0', '1', '1', '1', '1', '1'] // 1-6级的起始值
+    headingStartValues: ['0', '1', '1', '1', '1', '1'], // 1-6级的起始值
+    equationNumberingMaxDepth: 4                       // 默认公式编号的最大引用层级
 };
 
 // 校验函数集合
@@ -581,8 +582,22 @@ function parseFormulasFrontMatterSettings(fm) {
             else if (trimmedPart === AUTO_PART_KEY) {
                 settings.autoNumberFormulas = true;
             }
-            else if (trimmedPart === 'continuous' || trimmedPart === 'heading-based') {
-                settings.equationNumberingMode = trimmedPart;
+            else if (trimmedPart === 'continuous') {
+                settings.equationNumberingMode = 'continuous';
+            }
+            // 解析 heading-based 及其参数
+            else if (trimmedPart.startsWith('heading-based')) {
+                settings.equationNumberingMode = 'heading-based';
+                
+                // 尝试提取括号内的数字，例如 heading-based(3)
+                const match = trimmedPart.match(/heading-based\((\d+)\)/);
+                if (match && match[1]) {
+                    const depth = parseInt(match[1]);
+                    // 确保深度在有效范围内 (1-6)
+                    if (depth >= 1 && depth <= 6) {
+                        settings.equationNumberingMaxDepth = depth;
+                    }
+                }
             }
         }
         return settings;
@@ -680,12 +695,15 @@ function formulasSettingsToCompactFrontMatterValue(settings) {
 
     if (settings.autoNumberFormulas) parts.push('auto');
 
-    if (settings.equationNumberingMode !== 'continuous') {
-        parts.push(settings.equationNumberingMode);
+    if (settings.equationNumberingMode === 'heading-based') {
+        // 始终输出 heading-based(X)，无论 X 是否为默认值
+        // 如果 settings.equationNumberingMaxDepth 未定义，则回退到默认值 4
+        const depth = settings.equationNumberingMaxDepth || 4;
+        parts.push(`heading-based(${depth})`);
     } else {
+        // 默认为 continuous
         parts.push('continuous');
     }
-
     return parts.join(', ');
 }
 
@@ -721,6 +739,7 @@ class NumberingControlModal extends obsidian.Modal {
         this.equationMode = config.settings.equationNumberingMode || 'continuous';
         this.firstLevel = config.settings.firstLevel || 1;
         this.maxLevel = config.settings.maxLevel || 6;
+        this.equationNumberingMaxDepth = config.settings.equationNumberingMaxDepth || 4;
         // 确保数组切片安全
         this.headingStyles = (config.settings.headingStyles || DEFAULT_SETTINGS.headingStyles).slice(0, 6);
         this.headingSeparators = (config.settings.headingSeparators || DEFAULT_SETTINGS.headingSeparators).slice(0, 6);
@@ -803,7 +822,36 @@ class NumberingControlModal extends obsidian.Modal {
         equationModeSelect.createEl('option', { text: '连续编号' }).value = 'continuous';
         equationModeSelect.createEl('option', { text: '基于标题编号' }).value = 'heading-based';
         equationModeSelect.value = this.equationMode;
-        equationModeSelect.onchange = (e) => { this.equationMode = e.target.value; };
+        // 联动逻辑：当切换模式时，显示/隐藏深度设置
+        equationModeSelect.onchange = (e) => { 
+            this.equationMode = e.target.value; 
+            if (this.equationMode === 'heading-based') {
+                maxDepthSetting.style.display = 'flex';
+            } else {
+                maxDepthSetting.style.display = 'none';
+            }
+        };
+
+        // 输入：Heading-based 模式的最大层级深度
+        const maxDepthSetting = settingsTabContent.createEl('div', { cls: 'setting-item' });
+        // 初始显示状态依赖于当前模式
+        maxDepthSetting.style.display = this.equationMode === 'heading-based' ? 'flex' : 'none';
+        
+        maxDepthSetting.createEl('label', { text: 'Heading-based 最大索引层级' });
+        const maxDepthInput = maxDepthSetting.createEl('input', { 
+            type: 'number', 
+            attr: { min: 1, max: 6, style: 'width: 50px;' } 
+        });
+        // 从配置中读取当前值，默认4
+        this.equationNumberingMaxDepth = this.config.settings.equationNumberingMaxDepth || 4; 
+        maxDepthInput.value = String(this.equationNumberingMaxDepth);
+        
+        maxDepthInput.onchange = (e) => {
+            const val = parseInt(e.target.value);
+            if (!isNaN(val) && val >= 1 && val <= 6) {
+                this.equationNumberingMaxDepth = val;
+            }
+        };
 
         // 输入：层级范围
         const rangeSetting = settingsTabContent.createEl('div', { cls: 'setting-item' });
@@ -872,7 +920,8 @@ class NumberingControlModal extends obsidian.Modal {
                 maxLevel: this.maxLevel,
                 headingStyles: this.headingStyles,
                 headingSeparators: this.headingSeparators,
-                headingStartValues: this.headingStartValues
+                headingStartValues: this.headingStartValues,
+                equationNumberingMaxDepth: this.equationNumberingMaxDepth
             };
             this.config.controlCallback('set-auto', options);
             this.close();
@@ -1193,15 +1242,35 @@ const updateEquationNumbering = ({ editor, data }, settings) => {
         if (settings.equationNumberingMode === 'heading-based') {
             const headings = data.headings || [];
             let currentHeading = null;
+            
+            // 获取配置的深度限制，默认为 4
+            const maxDepth = settings.equationNumberingMaxDepth || 4;
 
             // 倒序查找最近标题
+            let searchIndex = -1;
+            
+            // 第一步：找到物理位置上最近的标题
             for (let j = headings.length - 1; j >= 0; j--) {
                 if (headings[j].position.start.line <= start.line) {
-                    currentHeading = headings[j];
+                    searchIndex = j;
                     break;
                 }
             }
 
+            // 第二步：如果找到了标题，但它太深了（比如是Level 5，限制是4），则继续往上找它的父级
+            if (searchIndex !== -1) {
+                // 从当前找到的位置开始，继续向前（向上）查找，直到找到 level <= maxDepth 的标题
+                for (let k = searchIndex; k >= 0; k--) {
+                    if (headings[k].level <= maxDepth) {
+                        currentHeading = headings[k];
+                        break;
+                    }
+                    // 如果一直往前找直到开头都没找到符合条件的（比如全文只有 Level 5），
+                    // currentHeading 将保持 null 或者你也可以选择保留最初找到的那个深层标题（取决于容错策略）
+                    // 按照需求逻辑，应该是不索引五级六级，意味着必须归属到四级及以上。
+                }
+            }
+            
             if (currentHeading) {
                 const headingLine = editor.getLine(currentHeading.position.start.line);
                 // 提取标题中的编号部分
@@ -1478,6 +1547,19 @@ class NumberHeadingsPluginSettingTab extends obsidian.PluginSettingTab {
                 .setValue(this.plugin.settings.equationNumberingMode)
                 .onChange((value) => __awaiter(this, void 0, void 0, function* () {
                     this.plugin.settings.equationNumberingMode = value;
+                    yield this.plugin.saveSettings();
+                })));
+
+        // 设置项：公式编号最大层级
+        new obsidian.Setting(containerEl)
+            .setName('公式编号最大索引层级')
+            .setDesc('仅在 Heading-based 模式下有效。若标题层级深于此值，将使用该层级的父标题进行编号索引。')
+            .addSlider(slider => slider
+                .setLimits(1, 6, 1)
+                .setValue(this.plugin.settings.equationNumberingMaxDepth || 4)
+                .setDynamicTooltip()
+                .onChange((value) => __awaiter(this, void 0, void 0, function* () {
+                    this.plugin.settings.equationNumberingMaxDepth = value;
                     yield this.plugin.saveSettings();
                 })));
 
