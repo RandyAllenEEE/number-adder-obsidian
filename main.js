@@ -1693,14 +1693,37 @@ class NumberHeadingsPlugin extends obsidian.Plugin {
         });
     }
 
-    /**
+/**
      * 处理失焦事件。
-     * 启动延迟更新计时器。
+     * 逻辑说明：
+     * 每次失焦时，都会重新获取【当前活跃文档】的配置。
+     * 1. 如果当前文档未开启自动编号 -> 直接返回 (无 Log，无计时器)。
+     * 2. 如果当前文档开启了自动编号 -> 启动计时器。
+     * 这种“即时检查”机制天然支持标签页切换。
      */
     handleBlur() {
+        // 1. 获取当前活跃视图 (用户切换标签页后，这里获取的就是新页面的信息)
+        const viewInfo = getViewInfo(this.app);
+        
+        // 如果当前没有打开 Markdown 文档，直接退出
+        if (!viewInfo || !viewInfo.data) return;
+
+        // 2. 解析当前文档的 FrontMatter 配置
+        // 这一步是关键：它会读取当前文档的 YAML 设置
+        const settings = getFrontMatterSettingsOrAlternative(viewInfo.data, this.settings);
+
+        // 3. 智能阻断：
+        // 如果全局开关是 off，或者 (标题自动编号关 AND 公式自动编号关)
+        // 那么立刻停止，不产生任何 Log，也不启动计时器
+        if (settings.off || (!settings.auto && !settings.autoNumberFormulas)) {
+            return;
+        }
+
+        // --- 只有配置了自动编号的文档才会运行到这里 ---
+
         this.clearAutoUpdateTimer();
 
-        // 转换秒为毫秒
+        // 获取延迟时间
         const delay = (this.settings.refreshInterval || 5000);
         console.log(`Number Headings Plugin: Blurred. Timer started for ${delay}ms.`);
 
